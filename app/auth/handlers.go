@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"html"
 	"log"
 	"net/http"
 )
@@ -34,9 +35,9 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func LogoutHandler(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("session")
-	if err == nil && cookie.Value != "" {
-		if err := FirebaseAuth.RevokeRefreshTokens(r.Context(), cookie.Value); err != nil {
+	uid := GetUserUID(r.Context())
+	if uid != "" {
+		if err := FirebaseAuth.RevokeRefreshTokens(r.Context(), uid); err != nil {
 			log.Printf("revoke error: %v", err)
 		}
 	}
@@ -58,7 +59,7 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 func UserHandler(w http.ResponseWriter, r *http.Request) {
 	uid := GetUserUID(r.Context())
 	if uid == "" {
-		w.Write([]byte(`<div id="auth-bar" class="flex items-center gap-3"><button id="login-btn" class="px-3 py-1.5 border-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-[var(--bg-subtle)] transition-all">Sign in</button></div>`))
+		w.Write([]byte(`<div id="auth-bar" class="flex items-center gap-3"><button id="login-btn" onclick="signInWithGoogle()" class="px-3 py-1.5 border-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-[var(--bg-subtle)] transition-all">Sign in</button></div>`))
 		return
 	}
 
@@ -68,5 +69,9 @@ func UserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Write([]byte(`<div id="auth-bar" class="flex items-center gap-3"><span class="text-xs font-bold text-[var(--fg-muted)]">` + user.DisplayName + `</span><form hx-post="/auth/logout" hx-target="body" hx-swap="innerHTML"><button class="px-3 py-1.5 border-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-[var(--bg-subtle)] transition-all">Sign out</button></form></div>`))
+	name := user.DisplayName
+	if name == "" {
+		name = user.Email
+	}
+	w.Write([]byte(`<div id="auth-bar" class="flex items-center gap-3"><a href="/profile" class="text-xs font-bold text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors">` + html.EscapeString(name) + `</a><form hx-post="/auth/logout" hx-target="body" hx-swap="innerHTML"><button class="px-3 py-1.5 border-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-[var(--bg-subtle)] transition-all">Sign out</button></form></div>`))
 }

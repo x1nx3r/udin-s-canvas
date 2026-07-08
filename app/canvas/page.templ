@@ -1,0 +1,47 @@
+package canvas
+
+import "gotth/app/components"
+
+templ CanvasPage(title string, drawingId string) {
+	<!DOCTYPE html>
+	<html lang="en" class="h-full">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title } — Canvas</title>
+			<link rel="icon" type="image/jpeg" href="/static/goth_lady_logo.jpg"/>
+			<link rel="preconnect" href="https://fonts.googleapis.com"/>
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
+			<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;700&display=swap" rel="stylesheet"/>
+			<link rel="stylesheet" href="/globals.css"/>
+			<script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
+			<script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js"></script>
+			<script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-auth-compat.js"></script>
+			<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+			<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+			<script src="https://unpkg.com/@excalidraw/excalidraw@0.17.0/dist/excalidraw.production.min.js"></script>
+			<script>
+				firebase.initializeApp({
+					apiKey: "AIzaSyC4uHw6X_ugSXKqVEiio3y24LqTPTPD27w",
+					authDomain: "canvas-78802.firebaseapp.com",
+					projectId: "canvas-78802",
+					storageBucket: "canvas-78802.firebasestorage.app",
+					messagingSenderId: "384877248276",
+					appId: "1:384877248276:web:61d08dffd5f19d0f358c01",
+				});
+			</script>
+			<style>
+				html, body, #canvas-mount { height: 100%; margin: 0; padding: 0; }
+				.excalidraw .App-menu_top .buttonList { display: none !important; }
+			</style>
+		</head>
+		<body class="h-full flex flex-col bg-[var(--bg)] text-[var(--fg)] antialiased">
+			@components.Navigation("/draw/" + drawingId)
+			<div id="canvas-mount" class="flex-1"></div>
+			<script>
+				const drawingId = "{ drawingId }";
+			</script>
+			<script src="/static/bridge.js"></script>
+		</body>
+	</html>
+}

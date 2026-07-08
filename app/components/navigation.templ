@@ -6,13 +6,13 @@ templ Navigation(currentPath string) {
 
 			<!-- Logo -->
 			<a href="/" class="flex items-center gap-2.5 font-black tracking-tight text-[var(--fg)] select-none">
-				<img src="/goth_lady_logo.jpg" class="h-8 w-8 border-2 border-[var(--border)] object-cover mix-blend-multiply dark:invert dark:mix-blend-screen" alt="Gothic Lady Logo"/>
+				<img src="/static/goth_lady_logo.jpg" class="h-8 w-8 border-2 border-[var(--border)] object-cover mix-blend-multiply dark:invert dark:mix-blend-screen" alt="Gothic Lady Logo"/>
 				<span class="text-sm font-bold uppercase tracking-wider">Canvas</span>
 			</a>
 
 			<!-- Right controls -->
 			<div class="flex items-center gap-3">
-				@navLink("/", currentPath, "Drawings")
+				@navLink("/drawings", currentPath, "Drawings")
 
 				<div id="auth-bar" hx-get="/auth/user" hx-trigger="load" hx-swap="outerHTML"></div>
 

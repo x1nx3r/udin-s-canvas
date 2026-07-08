@@ -29,11 +29,11 @@ func Navigation(currentPath string) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<header class=\"sticky top-0 z-50 w-full border-b-2 border-[var(--border)] bg-[var(--bg)]/95\"><div class=\"mx-auto flex h-14 max-w-7xl items-center justify-between px-6 lg:px-8\"><!-- Logo --><a href=\"/\" class=\"flex items-center gap-2.5 font-black tracking-tight text-[var(--fg)] select-none\"><img src=\"/goth_lady_logo.jpg\" class=\"h-8 w-8 border-2 border-[var(--border)] object-cover mix-blend-multiply dark:invert dark:mix-blend-screen\" alt=\"Gothic Lady Logo\"> <span class=\"text-sm font-bold uppercase tracking-wider\">Canvas</span></a><!-- Right controls --><div class=\"flex items-center gap-3\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<header class=\"sticky top-0 z-50 w-full border-b-2 border-[var(--border)] bg-[var(--bg)]/95\"><div class=\"mx-auto flex h-14 max-w-7xl items-center justify-between px-6 lg:px-8\"><!-- Logo --><a href=\"/\" class=\"flex items-center gap-2.5 font-black tracking-tight text-[var(--fg)] select-none\"><img src=\"/static/goth_lady_logo.jpg\" class=\"h-8 w-8 border-2 border-[var(--border)] object-cover mix-blend-multiply dark:invert dark:mix-blend-screen\" alt=\"Gothic Lady Logo\"> <span class=\"text-sm font-bold uppercase tracking-wider\">Canvas</span></a><!-- Right controls --><div class=\"flex items-center gap-3\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navLink("/", currentPath, "Drawings").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navLink("/drawings", currentPath, "Drawings").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

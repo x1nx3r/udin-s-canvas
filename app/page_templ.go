@@ -8,7 +8,7 @@ package app
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-func Page() templ.Component {
+func LandingPage() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -41,7 +41,7 @@ func Page() templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"mx-auto max-w-5xl px-6 py-16 lg:px-8\"><div class=\"flex items-center justify-between mb-12\"><div><h1 class=\"text-4xl font-black text-[var(--fg)] tracking-tight\">Your Drawings</h1><p class=\"mt-2 text-xs font-bold text-[var(--fg-muted)] uppercase tracking-wider\">Create, edit, and share your Excalidraw canvases.</p></div><a href=\"/draw/new\" class=\"inline-flex h-10 items-center border-2 border-[var(--border)] bg-[var(--fg)] px-6 text-xs font-bold uppercase tracking-wider text-[var(--bg)] transition-all hover:bg-[var(--bg-subtle)] hover:text-[var(--fg)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[4px_4px_0px_0px_var(--border)]\">New Drawing</a></div><div id=\"drawing-list\" class=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6\"></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"mx-auto max-w-3xl px-6 py-28 lg:px-8 text-center\"><h1 class=\"text-6xl font-black uppercase tracking-tighter text-[var(--fg)] sm:text-7xl leading-none\">Draw together.</h1><p class=\"mx-auto mt-6 max-w-lg text-sm font-bold text-[var(--fg-muted)] leading-relaxed uppercase tracking-wide\">A lightweight Excalidraw wrapper. No node_modules. No latency. Just a canvas, a link, and your ideas.</p><button onclick=\"signInWithGoogle()\" class=\"mt-10 inline-flex h-12 items-center border-2 border-[var(--border)] bg-[var(--fg)] px-8 text-sm font-bold uppercase tracking-wider text-[var(--bg)] transition-all hover:bg-[var(--bg-subtle)] hover:text-[var(--fg)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[4px_4px_0px_0px_var(--border)]\">Sign in with Google</button></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

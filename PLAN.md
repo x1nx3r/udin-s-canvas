@@ -1,13 +1,85 @@
-# Excalidraw Wrapper — Implementation Plan
+# Excalidraw Wrapper — Plan
 
-## Overview
+## Pages
 
-Transform the GOTTH boilerplate into an Excalidraw drawing app with Firestore persistence,
-Firebase Auth, and shareable links. The architecture is **hybrid**: the canvas is a JS island
-(Excalidraw runs client-side), everything surrounding it (dashboard, nav, auth, sharing) uses
-HTMX with server-rendered Templ fragments.
+| Route | Page | Auth | Description |
+|-------|------|------|-------------|
+| `/` | Landing | No | Hero + "Sign in with Google" CTA |
+| `/drawings` | Dashboard | Yes | Grid of user's drawings, "New Drawing" button |
+| `/draw/{id}` | Canvas | Yes | Excalidraw editor with auto-save |
+| `/shared/{slug}` | Shared | No | Read-only Excalidraw view |
+| `/profile` | Profile | Yes | Display name, photo, account management |
+| `/docs/*` | Docs | No | Already exists |
 
----
+## Components
+
+### Shared (in `app/components/`)
+- **Navigation** — existing, updated: auth bar, "Drawings" link, "Profile" link when signed in
+- **Footer** — existing, unchanged
+- **DrawingCard** — thumbnail, title, last modified, share status, delete button
+- **ShareDialog** — inline share link with copy button, revoke toggle
+- **AutoSaveBadge** — "Saving..." / "Saved" / "Error" indicator (HTMX-polled)
+- **UserMenu** — avatar + dropdown with Profile link + Sign out
+- **EmptyState** — "No drawings yet" illustration + CTA
+
+### Auth (in `app/auth/`)
+- **AuthBar** — rendered by `GET /auth/user`: shows "Sign in" button or user info
+
+### Dashboard (in `app/dashboard/`)
+- **DashboardPage** — grid layout with DrawingCards
+- **NewDrawingButton** — creates drawing, redirects to canvas
+
+### Canvas (in `app/canvas/`)
+- **CanvasPage** — Templ shell + Excalidraw mount div + inline bridge JS
+- **Toolbar** — minimal HTMX toolbar (save, share, back to dashboard)
+
+### Shared (in `app/shared/`)
+- **SharedPage** — read-only Excalidraw (no editing tools)
+
+### Profile (in `app/profile/`)
+- **ProfilePage** — display name, email, photo, sign-out button
+- **ProfileForm** — edit display name (saves to Firestore user doc)
+
+## Theming
+
+Keep the existing brutalist design language from the boilerplate:
+
+### CSS Variable System (already in `globals.css`)
+
+```css
+:root {
+  --bg: #fff;
+  --fg: #1a1a24;
+  --fg-muted: #6b6b80;
+  --bg-subtle: #f5f5f7;
+  --border: #1a1a24;
+  --accent: #6c5ce7;
+  --red: #e74c3c;
+  --green: #00b894;
+}
+.dark {
+  --bg: #0d0d14;
+  --fg: #e8e8ed;
+  --fg-muted: #8b8b9e;
+  --bg-subtle: #14141f;
+  --border: #2a2a3a;
+  --accent: #7c6cf0;
+  --red: #e74c3c;
+  --green: #00dba0;
+}
+```
+
+### Design rules (inherited)
+- 2px borders everywhere, no border-radius
+- Solid shadows with `translate` on hover/active (brutalist)
+- `font-black` uppercase tracking-wider headings
+- Mono font for technical labels (`Fira Code`)
+- Inter for body, Cinzel for display (already imported)
+
+### Dark mode
+- Defaults to system preference via `prefers-color-scheme`
+- Toggle in nav saves to localStorage
+- View transitions on toggle via `document.startViewTransition()`
 
 ## Directory Structure
 
@@ -15,131 +87,72 @@ HTMX with server-rendered Templ fragments.
 main.go
 app/
   auth/
-    middleware.go          — Firebase session cookie verification (wraps http.Handler)
-    handlers.go            — POST /auth/login, POST /auth/logout
-    firebase.go            — Admin SDK init (Firestore + Auth clients)
+    firebase.go         — Admin SDK init
+    middleware.go        — session cookie → context
+    handlers.go          — login/logout/user handlers
   dashboard/
-    page.go                — GET / — list user's drawings
-    page.templ             — dashboard page
-    drawing_card.templ     — reusable card in the list
+    page.go             — GET /drawings handler
+    page.templ          — DashboardPage component
   canvas/
-    page.go                — GET /draw/{id} — serve editor page (hybrid)
-    page.templ             — Templ layout + Excalidraw mount div + inline JS bridge
-    data.go                — GET /draw/{id}/data (JSON), POST /draw/{id}/save
-    share.go               — POST /draw/{id}/share, DELETE /draw/{id}/share
+    page.go             — GET /draw/{id} handler
+    page.templ          — CanvasPage component
+    data.go             — save/load JSON handlers
+    share.go            — share link CRUD
   shared/
-    page.go                — GET /shared/{slug} — read-only view
-    page.templ
+    page.go             — GET /shared/{slug} handler
+    page.templ          — SharedPage component
+  profile/
+    page.go             — GET /profile handler
+    page.templ          — ProfilePage component
   components/
-    navigation.templ       — updated: user avatar, login/logout
-    share_dialog.templ     — share link display/copy
+    navigation.templ     — updated with auth-aware links
+    footer.templ         — unchanged
+    drawing_card.templ   — DrawingCard component
+    share_dialog.templ   — ShareDialog component
+    auto_save.templ      — AutoSaveBadge component
+    empty_state.templ    — EmptyState component
   assets/
-    bridge.js              — Excalidraw ↔ Go adapter (embedded via //go:embed)
+    bridge.js            — Excalidraw ↔ Go adapter
 ```
 
----
+## Data Flow (per page)
 
-## Routes
-
-| Method | Path                  | Handler             | Auth | Response Type    |
-|--------|-----------------------|---------------------|------|------------------|
-| GET    | `/`                   | dashboard.PageHandler | Yes | HTML (Templ)    |
-| GET    | `/draw/{id}`          | canvas.PageHandler  | Yes  | HTML (Templ)    |
-| POST   | `/draw/new`           | dashboard.NewHandler | Yes | Redirect         |
-| POST   | `/draw/{id}/save`     | canvas.SaveHandler  | Yes  | JSON / HTMX frag |
-| GET    | `/draw/{id}/data`     | canvas.DataHandler  | Yes  | JSON             |
-| POST   | `/draw/{id}/share`    | canvas.ShareHandler | Yes  | HTML (Templ)     |
-| DELETE | `/draw/{id}/share`    | canvas.ShareHandler | Yes  | HTML (Templ)     |
-| GET    | `/shared/{slug}`      | shared.PageHandler  | No   | HTML (Templ)     |
-| POST   | `/auth/login`         | auth.LoginHandler   | No   | HTMX redirect    |
-| POST   | `/auth/logout`        | auth.LogoutHandler  | No   | HTMX redirect    |
-
----
-
-## Firestore Schema
-
-### `drawings/{drawingId}`
-
-```json
-{
-  "ownerId":    "string",
-  "title":      "string",
-  "createdAt":  "Timestamp",
-  "updatedAt":  "Timestamp",
-  "sceneData":  "string (JSON: { elements: [], appState: {} })",
-  "shareSlug":  "string | null"
-}
+```
+Landing (/)          → no fetch, static hero + sign-in button
+Dashboard (/drawings) → hx-get="/api/drawings" → server queries Firestore → renders DrawingCards
+Canvas (/draw/{id})  → page load: fetch /api/draw/{id}/data → Excalidraw.importScene()
+                       onChange → debounce → fetch POST /api/draw/{id}/save
+                       HTMX: share button → POST /api/draw/{id}/share → renders ShareDialog
+Profile (/profile)   → hx-get="/api/profile" → renders form, POST to update
+Shared (/shared/{x}) → page load: fetch /api/shared/{x}/data → Excalidraw.importScene() (read-only)
 ```
 
-### `shared/{shareSlug}`
+## Route Map (final)
 
-```json
-{
-  "drawingId":  "string",
-  "createdAt":  "Timestamp"
-}
-```
+| Method | Path | Handler | Auth | Resp |
+|--------|------|---------|------|------|
+| GET | `/` | dashboard.PageHandler (landing) | No | Templ |
+| GET | `/drawings` | dashboard.PageHandler (dashboard) | Yes | Templ |
+| GET | `/draw/{id}` | canvas.PageHandler | Yes | Templ |
+| POST | `/draw/new` | dashboard.NewHandler | Yes | Redirect |
+| POST | `/api/draw/{id}/save` | canvas.SaveHandler | Yes | JSON |
+| GET | `/api/draw/{id}/data` | canvas.DataHandler | Yes | JSON |
+| POST | `/api/draw/{id}/share` | canvas.ShareHandler | Yes | Templ |
+| DELETE | `/api/draw/{id}/share` | canvas.ShareHandler | Yes | Templ |
+| GET | `/shared/{slug}` | shared.PageHandler | No | Templ |
+| GET | `/api/shared/{slug}/data` | shared.DataHandler | No | JSON |
+| GET | `/profile` | profile.PageHandler | Yes | Templ |
+| POST | `/api/profile` | profile.UpdateHandler | Yes | Templ/redirect |
+| POST | `/auth/login` | auth.LoginHandler | No | HX-Redirect |
+| POST | `/auth/logout` | auth.LogoutHandler | No | HX-Redirect |
+| GET | `/auth/user` | auth.UserHandler | No | HTML frag |
+| GET | `/docs` / `/docs/{slug}` | docs.PageHandler | No | Templ |
 
-Note: `sceneData` is stored as a single JSON string to stay well under Firestore's 1MB
-document limit. Excalidraw scenes with thousands of elements can be large; storing as a
-string avoids index overhead on fields we never query.
+## Implementation Order
 
----
-
-## Auth Flow (Firebase Auth)
-
-1. **Client** initializes Firebase Auth SDK and shows a "Sign in with Google" button.
-2. On click, Firebase popup returns an ID token.
-3. Client sends the ID token to `POST /auth/login` via HTMX.
-4. **Server**: `auth.LoginHandler` verifies the token via Firebase Admin SDK, creates a
-   session cookie (http-only, same-site=strict), returns an HTMX redirect to `/`.
-5. **Server**: `auth.Middleware` reads the cookie on every subsequent request, verifies it
-   with Admin SDK, injects `uid` into `r.Context()`.
-6. **Logout**: `POST /auth/logout` clears the session cookie.
-
----
-
-## JavaScript Surface Area
-
-Three JS sources on the canvas page:
-
-| Source | Purpose |
-|--------|---------|
-| Firebase Auth SDK | sign-in popup, ID token management |
-| Excalidraw (npm/CDN) | the canvas editor |
-| `bridge.js` (embedded) | glues Excalidraw events to Go endpoints |
-
-The bridge.js responsibilities:
-- Initialize Excalidraw instance in the mount div
-- On page load: `fetch(GET /draw/{id}/data)` → `excalidrawAPI.importScene(data)`
-- On `excalidrawAPI.onChange`: debounce, serialize scene, `fetch(POST /draw/{id}/save, {body: JSON.stringify(sceneData)})`
-- Listen for HTMX-triggered custom events from share dialog
-
----
-
-## Implementation Phases
-
-### Phase 1 — Foundation
-- [ ] `app/auth/firebase.go` — load credentials, init Firestore + Auth clients
-- [ ] `app/auth/middleware.go` — cookie read/verify, context injection
-- [ ] `app/auth/handlers.go` — login/logout endpoints
-- [ ] Update `main.go` — register middleware + auth routes
-- [ ] Update `app/components/navigation.templ` — show user avatar / login button
-
-### Phase 2 — Drawing CRUD
-- [ ] `app/dashboard/page.go` + `page.templ` — list drawings from Firestore
-- [ ] `app/dashboard/new.go` — create drawing, redirect to `/draw/{id}`
-- [ ] `app/canvas/data.go` — save/load JSON handlers
-- [ ] `app/canvas/page.go` + `page.templ` — serve Excalidraw with embedded bridge
-
-### Phase 3 — Sharing
-- [ ] `app/canvas/share.go` — generate/revoke share slugs
-- [ ] `app/components/share_dialog.templ` — share link UI
-- [ ] `app/shared/page.go` — read-only view (no toolbar, prevent edits)
-- [ ] `app/assets/bridge.js` — wire Excalidraw events to save/load
-
-### Phase 4 — Polish
-- [ ] Auto-save indicator (HTMX-polled or SSE)
-- [ ] Delete drawing
-- [ ] Last-opened sorting
-- [ ] Rate-limit share link generation
+### Phase 1 ✅ — Auth Foundation (done)
+### Phase 2 — Dashboard + Drawing CRUD
+### Phase 3 — Canvas Editor + bridge.js
+### Phase 4 — Sharing + Read-only
+### Phase 5 — Profile Page
+### Phase 6 — Polish (delete, auto-save indicator, rate limiting)

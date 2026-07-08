@@ -9,6 +9,8 @@ import (
 	"gotth/app"
 	"gotth/app/assets"
 	"gotth/app/auth"
+	"gotth/app/canvas"
+	"gotth/app/dashboard"
 	"gotth/app/docs"
 	_ "github.com/a-h/templ"
 )
@@ -18,34 +20,36 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	publicFS, err := fs.Sub(assets.Public, "public")
-	if err != nil {
-		log.Fatal(err)
-	}
-	fileServer := http.FileServer(http.FS(publicFS))
-
+	// Globals CSS (embedded binary)
 	mux.Handle("GET /globals.css", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css")
 		w.Write(assets.CSS)
 	}))
 
-	mux.HandleFunc("GET /{file}", func(w http.ResponseWriter, r *http.Request) {
-		fileName := r.PathValue("file")
-		if file, err := publicFS.Open(fileName); err == nil {
-			file.Close()
-			fileServer.ServeHTTP(w, r)
-			return
-		}
-		http.NotFound(w, r)
-	})
+	// Static assets (embedded under public/)
+	publicFS, err := fs.Sub(assets.Public, "public")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fileServer := http.FileServer(http.FS(publicFS))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", fileServer))
 
 	// Auth
 	mux.HandleFunc("POST /auth/login", auth.LoginHandler)
 	mux.HandleFunc("POST /auth/logout", auth.LogoutHandler)
 	mux.HandleFunc("GET /auth/user", auth.UserHandler)
 
-	// Dashboard
-	mux.HandleFunc("GET /{$}", auth.RequireAuth(app.PageHandler))
+	// Landing (public) / Dashboard (auth required)
+	mux.HandleFunc("GET /{$}", app.PageHandler)
+	mux.Handle("GET /drawings", auth.RequireAuth(dashboard.PageHandler))
+	mux.Handle("POST /draw/new", auth.RequireAuth(dashboard.NewHandler))
+
+	// Canvas editor
+	mux.Handle("GET /draw/{id}", auth.RequireAuth(canvas.PageHandler))
+
+	// Canvas data API
+	mux.Handle("GET /api/draw/{id}/data", auth.RequireAuth(canvas.DataHandler))
+	mux.Handle("POST /api/draw/{id}/save", auth.RequireAuth(canvas.SaveHandler))
 
 	// Docs
 	mux.HandleFunc("GET /docs", docs.PageHandler)
