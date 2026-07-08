@@ -1,0 +1,31 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  bin = "./bin/server"
+  cmd = "make templ && go build -o ./bin/server main.go"
+  delay = 300
+  exclude_dir = ["bin", "tmp", "public", ".git"]
+  exclude_regex = ["_test\\.go$", ".*_templ\\.go$"]
+  include_ext = ["go", "templ", "output"]
+  kill_delay = "0s"
+  send_interrupt = false
+  stop_on_error = true
+
+[color]
+  app = ""
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  time = false
+
+[misc]
+  clean_on_exit = true
+
+[proxy]
+  enabled = true
+  proxy_port = 3000
+  app_port = 3001

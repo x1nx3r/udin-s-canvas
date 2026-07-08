@@ -1,0 +1,11 @@
+{
+  "name": "gotth-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "make dev",
+    "build": "make build",
+    "start": "make start",
+    "setup": "make setup"
+  }
+}

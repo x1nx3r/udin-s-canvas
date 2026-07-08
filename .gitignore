@@ -1,0 +1,16 @@
+# Build artifacts
+/bin/
+/tmp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Firebase credentials (DO NOT COMMIT)
+*-firebase-adminsdk-*.json
+service-account.json

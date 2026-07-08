@@ -1,0 +1,105 @@
+package components
+
+import "fmt"
+
+type ChartMetric struct {
+	Label      string
+	NextVal    float64
+	NextLabel  string
+	GotthVal   float64
+	GotthLabel string
+}
+
+templ Chart(metricType string) {
+	{{
+		var metric ChartMetric
+		var nextMetricType string
+		switch metricType {
+		case "memory":
+			metric = ChartMetric{"Cold-start memory usage", 280, "280 MB", 12, "12 MB"}
+			nextMetricType = "build"
+		case "build":
+			metric = ChartMetric{"Production build time", 45, "45.0 s", 0.18, "0.18 s"}
+			nextMetricType = "bundle"
+		default:
+			metricType = "bundle"
+			metric = ChartMetric{"Client JS bundle size", 450, "450 KB", 0, "0 KB"}
+			nextMetricType = "memory"
+		}
+	}}
+	<div id="metric-chart"
+		hx-post={ fmt.Sprintf("/chart?type=%s", nextMetricType) }
+		hx-trigger="every 3s"
+		hx-swap="outerHTML"
+		class="rounded-none border-2 border-[var(--border)] bg-[var(--bg)] p-6 shadow-[4px_4px_0px_0px_var(--border)]"
+		style="animation: fade-in 0.3s ease both"
+	>
+		<!-- Tabs -->
+		<div class="mb-8 flex items-center justify-between gap-4 flex-wrap border-b-2 border-[var(--border)] pb-4">
+			<h3 class="text-xs font-mono font-bold uppercase tracking-wider text-[var(--fg)]">{ metric.Label }</h3>
+			<div class="flex gap-1.5">
+				@chartTab("bundle", metricType, "JS Bundle")
+				@chartTab("memory", metricType, "Memory")
+				@chartTab("build", metricType, "Build Time")
+			</div>
+		</div>
+
+		<!-- Bars -->
+		<div class="space-y-6">
+			<!-- Next.js row -->
+			<div>
+				<div class="mb-2 flex items-center justify-between text-xs font-bold uppercase">
+					<span class="text-[var(--fg-muted)]">Next.js</span>
+					<span class="text-[var(--fg)] font-mono">{ metric.NextLabel }</span>
+				</div>
+				<div class="h-3 w-full border-2 border-[var(--border)] bg-[var(--bg-subtle)]">
+					<div class="h-full bg-[var(--red)] border-r-2 border-[var(--border)] origin-left animate-grow-x" style="width: 100%"></div>
+				</div>
+			</div>
+
+			<!-- GOTTH row -->
+			<div>
+				<div class="mb-2 flex items-center justify-between text-xs font-bold uppercase">
+					<span class="text-[var(--fg-muted)]">GOTTH Stack</span>
+					<span class="text-[var(--green)] font-mono">{ metric.GotthLabel }</span>
+				</div>
+				<div class="h-3 w-full border-2 border-[var(--border)] bg-[var(--bg-subtle)]">
+					{{
+						pct := (metric.GotthVal / metric.NextVal) * 100
+						if pct < 1.5 {
+							pct = 1.5
+						}
+					}}
+					<div class="h-full bg-[var(--green)] border-r-2 border-[var(--border)] origin-left animate-grow-x" style={ fmt.Sprintf("width:%.2f%%", pct) }></div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Reduction label -->
+		<p class="mt-6 text-xs font-semibold text-[var(--fg-muted)]">
+			GOTTH uses significantly less
+			if metricType == "bundle" {
+				client-side JavaScript, resulting in faster page loads and zero hydration cost.
+			} else if metricType == "memory" {
+				memory on startup. A single Go binary starts in under 5 ms.
+			} else {
+				time to compile. The Go compiler is fast by design; no incremental cache needed.
+			}
+		</p>
+	</div>
+}
+
+templ chartTab(value string, current string, label string) {
+	<button
+		hx-post={ fmt.Sprintf("/chart?type=%s", value) }
+		hx-target="#metric-chart"
+		hx-swap="outerHTML"
+		class={
+			"px-3 py-1.5 text-xs font-bold uppercase tracking-wider border-2 border-[var(--border)] transition-all cursor-pointer",
+			templ.KV("bg-[var(--fg)] text-[var(--bg)] shadow-none translate-x-0.5 translate-y-0.5", value == current),
+			templ.KV("bg-[var(--bg-subtle)] text-[var(--fg-muted)] hover:text-[var(--fg)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[2px_2px_0px_0px_var(--border)]", value != current),
+		}
+	>
+		{ label }
+	</button>
+}

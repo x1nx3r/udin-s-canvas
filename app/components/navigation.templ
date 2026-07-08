@@ -1,0 +1,61 @@
+package components
+
+templ Navigation(currentPath string) {
+	<header class="sticky top-0 z-50 w-full border-b-2 border-[var(--border)] bg-[var(--bg)]/95">
+		<div class="mx-auto flex h-14 max-w-7xl items-center justify-between px-6 lg:px-8">
+
+			<!-- Logo -->
+			<a href="/" class="flex items-center gap-2.5 font-black tracking-tight text-[var(--fg)] select-none">
+				<img src="/goth_lady_logo.jpg" class="h-8 w-8 border-2 border-[var(--border)] object-cover mix-blend-multiply dark:invert dark:mix-blend-screen" alt="Gothic Lady Logo"/>
+				<span class="text-sm font-bold uppercase tracking-wider">Canvas</span>
+			</a>
+
+			<!-- Right controls -->
+			<div class="flex items-center gap-3">
+				@navLink("/", currentPath, "Drawings")
+
+				<div id="auth-bar" hx-get="/auth/user" hx-trigger="load" hx-swap="outerHTML"></div>
+
+				<button
+					id="theme-toggle"
+					onclick="toggleTheme()"
+					class="flex h-8 w-8 items-center justify-center border-2 border-[var(--border)] bg-[var(--bg)] text-[var(--fg)] hover:bg-[var(--bg-subtle)] cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[2px_2px_0px_0px_var(--border)]"
+					aria-label="Toggle dark mode"
+				>
+					<svg class="hidden dark:block h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"/>
+					</svg>
+					<svg class="block dark:hidden h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+					</svg>
+				</button>
+			</div>
+		</div>
+	</header>
+	<script>
+		function toggleTheme() {
+			if (document.startViewTransition) {
+				document.startViewTransition(() => {
+					var isDark = document.documentElement.classList.toggle('dark');
+					localStorage.setItem('theme', isDark ? 'dark' : 'light');
+				});
+			} else {
+				var isDark = document.documentElement.classList.toggle('dark');
+				localStorage.setItem('theme', isDark ? 'dark' : 'light');
+			}
+		}
+	</script>
+}
+
+templ navLink(href string, currentPath string, label string) {
+	<a
+		href={ templ.SafeURL(href) }
+		class={
+			"px-3 py-1.5 border-2 text-xs font-bold uppercase tracking-wider transition-all",
+			templ.KV("bg-[var(--bg-subtle)] border-[var(--border)] text-[var(--fg)] shadow-none translate-x-0.5 translate-y-0.5", currentPath == href),
+			templ.KV("border-transparent text-[var(--fg-muted)] hover:text-[var(--fg)] hover:border-[var(--border)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none hover:shadow-[2px_2px_0px_0px_var(--border)]", currentPath != href),
+		}
+	>
+		{ label }
+	</a>
+}
