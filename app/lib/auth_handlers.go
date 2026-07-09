@@ -5,6 +5,8 @@ import (
 	"net/http"
 )
 
+const navBtnClass = `px-3 py-1.5 border-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-[var(--bg-subtle)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[2px_2px_0px_0px_var(--border)]`
+
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -36,7 +38,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(`<span id="auth-bar" hx-swap-oob="true"><a href="/drawings" class="px-3 py-1.5 border-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider hover:bg-[var(--bg-subtle)] transition-all">Drawings</a></span>`))
+	w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2"></div>`))
 }
 
 func LogoutHandler(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +56,9 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(`<span id="auth-bar" hx-swap-oob="true"><button onclick="signInWithGoogle()" class="px-3 py-1.5 border-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider hover:bg-[var(--bg-subtle)] transition-all">Sign In</button></span>`))
+	w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` +
+		`<button onclick="signInWithGoogle()" class="` + navBtnClass + `">Sign In</button>` +
+		`</div>`))
 }
 
 func UserHandler(w http.ResponseWriter, r *http.Request) {
@@ -62,14 +66,18 @@ func UserHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html")
 	if uid == "" {
-		w.Write([]byte(`<button onclick="signInWithGoogle()" class="px-3 py-1.5 border-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider hover:bg-[var(--bg-subtle)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[2px_2px_0px_0px_var(--border)]">Sign In</button>`))
+		w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` +
+			`<button onclick="signInWithGoogle()" class="` + navBtnClass + `">Sign In</button>` +
+			`</div>`))
 		return
 	}
 
 	user, err := FirebaseAuth.GetUser(r.Context(), uid)
 	if err != nil {
 		log.Printf("get user: %v", err)
-		w.Write([]byte(`<button onclick="signInWithGoogle()" class="px-3 py-1.5 border-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider hover:bg-[var(--bg-subtle)] transition-all">Sign In</button>`))
+		w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` +
+			`<button onclick="signInWithGoogle()" class="` + navBtnClass + `">Sign In</button>` +
+			`</div>`))
 		return
 	}
 
@@ -80,11 +88,11 @@ func UserHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` +
 		`<span class="text-xs font-bold text-[var(--fg-muted)]">` + name + `</span>` +
-		`<a href="/profile" class="h-8 w-8 border-2 border-[var(--border)] overflow-hidden">` +
+		`<a href="/profile" class="h-8 w-8 border-2 border-[var(--border)] overflow-hidden shrink-0">` +
 		`<img src="` + user.PhotoURL + `" alt="" class="h-full w-full object-cover"/>` +
 		`</a>` +
 		`<form method="POST" action="/auth/logout" hx-boost="false">` +
-		`<button type="submit" class="px-2 py-1 border-2 border-[var(--border)] text-[10px] font-bold uppercase tracking-wider hover:bg-[var(--bg-subtle)] transition-all cursor-pointer">Logout</button>` +
+		`<button type="submit" class="` + navBtnClass + `">Logout</button>` +
 		`</form>` +
 		`</div>`))
 }
