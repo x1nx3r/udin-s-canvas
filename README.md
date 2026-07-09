@@ -8,35 +8,19 @@
   <strong>Live: <a href="https://canvas.x1nx3r.dev" target="_blank">canvas.x1nx3r.dev</a></strong>
 </p>
 
-So I built an Excalidraw wrapper because I wanted to draw diagrams without
-signing up for a SaaS product that emails me every Tuesday about "premium
-canvas textures." You know the ones. "Unlock the felt-tip pen for $9/mo."
-I just want to draw a box with an arrow in it. I don't need a subscription
-for that.
+An Excalidraw wrapper. Because I wanted to draw diagrams without signing up
+for a SaaS product that emails me every Tuesday about "premium canvas
+textures." You know the ones. "Unlock the felt-tip pen for $9/mo." I just
+want to draw a box with an arrow in it. I don't need a subscription for that.
 
 This is **Udin's Canvas** — a Go + Templ + HTMX + Tailwind app that wraps
-Excalidraw, saves drawings to Firestore, and lets you share them with a
-link. No latency. No login wall (well, a Google login wall, but you already
-have a Google account). No "upgrade to pro to export as PNG."
+Excalidraw, saves drawings to SQLite, and lets you share them with a link.
+No latency. No login wall (well, a Google login wall, but you already have
+a Google account). No "upgrade to pro to export as PNG."
 
-It compiles to a single binary. The Excalidraw bundle is 8MB of JavaScript
-embedded in that binary. I think about this sometimes when I'm trying to
-fall asleep — how 8 megabytes of someone else's canvas renderer lives
-inside my statically linked Go binary, warm in RAM, waiting for a user to
-draw a stick figure.
-
-Anyway.
-
-## Getting Started
-
-```bash
-# Prerequisites: Go 1.22+, Node (for the excalidraw bundle step)
-go run .
-```
-
-Open [http://localhost:3000](http://localhost:3000). You'll see a landing
-page. Click "Start Drawing." Sign in with Google. Draw a box. It saves
-automatically because I didn't want you to lose your masterpiece.
+It compiles to a single binary (~59MB, mostly the 8MB Excalidraw bundle).
+The database is a single `canvas.db` file. I deployed it on a $5 VPS and it
+uses 16MB of RAM. That's less than most people's browser tabs.
 
 ## Stack
 
@@ -47,8 +31,31 @@ automatically because I didn't want you to lose your masterpiece.
 | CSS | Tailwind v4 (standalone) | Utility classes without 400MB of PostCSS plugins. |
 | Interactivity | HTMX | Server-rendered HTML fragments. No virtual DOM. |
 | Auth | Firebase Auth Web SDK | Google sign-in. ID tokens. Server-verified session cookies. |
-| Database | Firestore | Real-time sync. Serverless. I don't have to write migrations. |
-| Canvas | Excalidraw (bundled) | 8MB of someone else's hard work. I just render it. |
+| Database | SQLite (`mattn/go-sqlite3`) | Single file. WAL mode. Zero config. CGO required. |
+| Canvas | Excalidraw 0.18.1 (bundled) | 8MB of someone else's hard work. I just render it. |
+
+## Getting Started
+
+```bash
+# Prerequisites: Go 1.22+, Node (for the excalidraw bundle), CGO (for SQLite)
+make setup     # installs templ, tailwind, downloads deps
+make dev       # live-reloading dev server on :3000
+```
+
+Or just:
+
+```bash
+go run .
+```
+
+Open [http://localhost:3000](http://localhost:3000). You'll see a landing
+page. Click "Start Drawing." Sign in with Google. Draw a box. It saves
+automatically because I didn't want you to lose your masterpiece.
+
+**Note:** Requires `CGO_ENABLED=1` because of `mattn/go-sqlite3`. This is
+the only dependency that needs CGO. On macOS it just works. On Linux you
+might need `gcc` installed (it's usually there already). On the server,
+`deploy.sh` sets `CGO_ENABLED=1 GOOS=linux GOARCH=amd64` for cross-compilation.
 
 ## How It Works
 
@@ -58,58 +65,98 @@ automatically because I didn't want you to lose your masterpiece.
 2. Firebase Auth Web SDK opens a popup, user authenticates.
 3. Client sends the ID token to `POST /auth/login`.
 4. Server verifies the token with the Firebase Admin SDK and creates an
-   http-only session cookie (`14 * 24 * time.Hour` expiry).
+   http-only session cookie (`14 * 24 * time.Hour` expiry, `SameSite=Strict`).
 5. Middleware verifies the cookie on every request and injects the user's
    `uid` into the request context.
 
 That's it. No JWT parsing on the client. No `localStorage` tokens. No
-"refresh token rotation" blog post you'll read at 2AM and immediately
-forget.
+"refresh token rotation" blog post you'll read at 2AM and immediately forget.
 
 ### Canvas Save/Load
 
 Excalidraw fires an `onChange` callback on every user action. The client
 debounces this with a 2-second timer. When the timer fires, it sends the
 entire scene (elements + appState) to `POST /api/draw/{id}/save`. The
-server writes it to Firestore with `firestore.MergeAll` so we don't
-accidentally wipe your drawing's metadata.
+server writes it to SQLite as a JSON blob in the `content` column.
 
-Loading is the reverse: `GET /api/draw/{id}/data` reads from Firestore,
+Loading is the reverse: `GET /api/draw/{id}/data` reads from SQLite,
 sanitizes the `appState.collaborators` field (because Excalidraw crashes
 if that's not an array — ask me how I know), and returns the scene.
 
+### SQLite
+
+The database is a single `canvas.db` file with WAL mode, busy timeout of
+5 seconds, and foreign keys enabled. The schema:
+
+```sql
+CREATE TABLE drawings (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT 'Untitled',
+    content TEXT,
+    share_slug TEXT UNIQUE,
+    thumbnail TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_drawings_owner ON drawings(owner_id);
+CREATE INDEX idx_drawings_share_slug ON drawings(share_slug);
+```
+
+`content` stores the full Excalidraw scene as JSON. `thumbnail` stores a
+base64-encoded PNG (under 100KB). `share_slug` is nullable — only set when
+the drawing is shared. The app uses `MaxOpenConns(1)` because SQLite doesn't
+handle concurrent writers well, and WAL mode + busy timeout handles the rest.
+
+On the server, the database lives in `/var/www/udin-canvas/shared/canvas.db`
+and is symlinked into each release directory. This means deploys never
+touch the database — it persists across atomic symlink swaps.
+
 ### Excalidraw Bundle
 
-Excalidraw is bundled at build time via esbuild (`--bundle --format=iife`).
+Excalidraw is bundled at build time via esbuild:
+
+```bash
+npx esbuild app/assets/excalidraw/entry.js \
+  --bundle \
+  --outfile=app/assets/public/excalidraw.bundle.js \
+  --minify \
+  --format=iife \
+  --global-name=ExcalidrawBundle
+```
+
 The entry point exports `Excalidraw`, `React`, `ReactDOM`, and
-`exportToBlob` as globals. The output is `app/assets/public/excalidraw.bundle.js`
-(8MB minified). It lives in the binary via `//go:embed`. The CSS is a
-separate file (also embedded) that gets linked in the page head.
+`exportToBlob` as globals. The output is ~8MB. It lives in the binary via
+`//go:embed`. The CSS is a separate file (also embedded) that gets linked
+in the page head.
+
+Versions are pinned to exact (`@excalidraw/excalidraw: 0.18.1`,
+`react: 18.3.1`, `react-dom: 18.3.1`) because Excalidraw's CSS classes
+change between versions, and our brutalist override stylesheet depends on
+specific selectors.
 
 ### Sharing
 
-Clicking "Share" hits `POST /api/draw/{id}/share`, which generates a random
-slug, creates a document in the `shares` collection mapping slug → drawingId,
-and stores the slug on the drawing document. The share dialog shows a
-read-only URL. Anyone with that URL can view the drawing — no auth required.
+Clicking "Share" hits `POST /api/draw/{id}/share`, which generates a
+16-byte random hex slug, stores it on the drawing, and returns it. The
+share dialog shows a read-only URL (`/shared/{slug}`). Anyone with that
+URL can view the drawing — no auth required.
 
-I know. Public URLs. It's basically security through obscurity plus one
-layer of "nobody knows the slug." If you need proper access control, this
-isn't the app for you. But for sending a wireframe to a client without
-making them create an account? It works.
+The shared page uses Excalidraw in `viewModeEnabled: true`. It loads the
+scene from `GET /api/shared/{slug}/data`, which does a public query
+(no auth middleware) by matching the `share_slug` column.
 
 ### Thumbnails
 
 After every save, the client calls `exportToBlob` (exported from the
 Excalidraw bundle) to generate a PNG thumbnail. If the blob is under
-100KB, it gets base64-encoded and stored in the `thumbnail` field on the
-Firestore document. The dashboard shows these thumbnails in a grid. If
-there's no thumbnail, you get a placeholder with the drawing title.
+100KB, it gets base64-encoded and stored in the `thumbnail` column. The
+dashboard shows these thumbnails in a grid. If there's no thumbnail, you
+get a placeholder with the drawing title.
 
 The 100KB limit is arbitrary. I picked it because it felt right. If your
 drawing produces a thumbnail larger than 100KB, congratulations, you've
-made something detailed enough that a 100KB thumbnail doesn't do it
-justice.
+made something detailed enough that a 100KB thumbnail doesn't do it justice.
 
 ### Excalidraw Theming
 
@@ -127,32 +174,125 @@ This took longer than I'd like to admit.
 ## Project Structure
 
 ```
-main.go                     # Routes, middleware, static serving
+main.go                          # Routes, middleware, static serving
 app/
-  auth/
-    firebase.go             # Firebase Admin SDK init
-    middleware.go           # Session cookie verification
-    handlers.go             # Login/logout/user endpoints
-  canvas/
-    page.go + .templ        # Canvas editor page
-    shared.go + .templ      # Read-only shared view
-    data.go                 # Save/load scene data
-    share.go                # Share slug generate + serve
-    rename.go               # PUT /api/draw/{id}/rename
-    thumbnail.go            # POST /api/draw/{id}/thumbnail
+  lib/                           # Shared infrastructure
+    auth.go                      # Firebase Admin SDK init (auto-detects service account)
+    middleware.go                # Session cookie verification, RequireAuth, GetUserUID
+    auth_handlers.go             # Login/logout/user endpoints (unified nav button styling)
+    db.go                        # SQLite init, WAL mode, schema migration
+  api/                           # API handlers (no HTML rendering)
+    draw.go                      # Data, Save, Share, Rename, Thumbnail, Delete handlers
+    shared.go                    # Public shared data handler (no auth)
+  canvas/                        # Canvas pages (Excalidraw editor)
+    page.go + .templ             # Canvas editor with merged title bar
+    shared.go + .templ           # Read-only shared view
   dashboard/
-    page.go + .templ        # Drawing list + new drawing
+    page.go + .templ             # Drawing list + new drawing (content-only, uses Layout)
   profile/
-    page.go + .templ        # User profile with drawing grid
+    page.go + .templ             # User profile with drawing grid (content-only, uses Layout)
   components/
-    navigation.templ        # Nav bar with logo, links, theme toggle
-    drawing_card.templ      # Card with thumbnail support
-    logo.templ              # SVG logo component
-    footer.templ            # Footer
+    navigation.templ             # Nav bar with logo, links, theme toggle (autoHide param)
+    drawing_card.templ           # Card with thumbnail, rename, delete
+    logo.templ                   # SVG logo component
+    footer.templ                 # Footer
+    empty_state.templ            # Empty state for dashboard
+  layout.templ                   # Root HTML shell (HTML, head, nav, footer, Firebase SDK)
+  canvas_layout.templ            # Minimal HTML shell for Excalidraw pages
+  page.templ                     # Landing page (hero, features, CTA)
+  page.go                        # Landing handler (redirects authenticated to /drawings)
+  globals.css                    # Design tokens, Tailwind config, base styles
   assets/
-    public/                 # Static files (logo, icons, excalidraw bundle/css)
-  globals.css               # Design tokens, base styles, Tailwind
+    excalidraw/                  # Excalidraw source (entry.js, package.json)
+    public/                      # Static files (logo, excalidraw bundle/css)
+    assets.go                    # go:embed directives
 ```
+
+### Layout Unification
+
+All pages use one of two layout templates:
+
+- **`Layout`** — Full HTML shell with nav, footer, Firebase SDK, HTMX. Used
+  by landing, dashboard, and profile pages. Page templates are content-only
+  components wrapped in `@Layout(...)`.
+
+- **`CanvasLayout`** — Minimal HTML shell with just the head (Excalidraw CSS,
+  theme init). Used by canvas and shared pages which need full-screen layouts
+  without nav/footer.
+
+This means 2 layout templates cover 5 pages, instead of 5 standalone HTML
+shells with duplicated `<head>` blocks.
+
+### Auth Bar
+
+The nav auth bar (`#auth-bar`) is loaded via HTMX on every page. The server
+returns a consistent `<div class="flex items-center gap-2">` with buttons
+that all share the same brutalist class set:
+
+```
+px-3 py-1.5 border-2 border-[var(--border)] text-xs font-bold uppercase
+tracking-wider cursor-pointer hover:bg-[var(--bg-subtle)] transition-all
+active:translate-x-0.5 active:translate-y-0.5 active:shadow-none
+shadow-[2px_2px_0px_0px_var(--border)]
+```
+
+This is defined once in `auth_handlers.go` as `navBtnClass` and used
+across all auth states (Sign In, Logout, logged-in profile bar).
+
+## Deployment
+
+The app deploys as a single binary to a bare-metal VPS via atomic symlink swap.
+
+### The Flow
+
+```bash
+bash deploy.sh
+```
+
+1. **Local build:** `make css && make templ && CGO_ENABLED=1 go build` → single binary
+2. **rsync:** Binary + Firebase JSON + Makefile.server → timestamped release dir
+3. **Atomic swap:** `ln -nfs` points `current` → new release
+4. **Symlink DB:** SQLite files in `shared/` are symlinked into the new release
+5. **Restart:** `systemd restart udin-canvas`
+6. **Clean up:** Old releases are compressed to `.tar.xz` archives (keep 5)
+
+Zero downtime. The binary is 59MB, the DB is a single file, and the whole
+deploy takes about 30 seconds including the compression of old releases.
+
+### Server Setup
+
+- **Server:** `103.93.163.44` (Ubuntu, bare-metal)
+- **Reverse proxy:** Caddy → `:3010` → localhost:3000
+- **Service:** `udin-canvas.service` with `MemoryMax=128M`
+- **Database:** `/var/www/udin-canvas/shared/canvas.db` (persists across deploys)
+- **Peak memory:** ~16MB
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `PORT` | No | `3000` | HTTP listen port |
+| `SQLITE_DB_PATH` | No | `./canvas.db` | Path to SQLite database file |
+
+The Firebase service account JSON is auto-detected by scanning for
+`-firebase-adminsdk-*.json` in the working directory. If you have exactly
+one such file, it gets picked up. If you have zero or more than one, the
+app yells at you.
+
+## Load Testing
+
+Ran k6 load tests against the live server. Results at 500 VUs:
+
+| Metric | Value |
+|---|---|
+| Error rate | 10.76% (all Cloudflare connection resets, 0% application errors) |
+| p95 latency | 739ms (Cloudflare overhead, not server) |
+| CRUD checks | 100% pass (create, save, load, rename, share, delete) |
+| Share bug | Fixed: was returning 100% errors due to NULL `share_slug` scan |
+
+The 10% error rate is entirely Cloudflare dropping connections during the
+ramp-up, not the server rejecting requests. The Go binary handles 500
+concurrent users with zero application-level errors.
 
 ## Why Not Just Use Excalidraw's Built-In Save?
 
@@ -161,11 +301,9 @@ works great for personal use. It doesn't work great for "I want to draw a
 diagram on my work computer and open it on my laptop without emailing
 myself a JSON file."
 
-The Firebase backend is overkill for a drawing app. I know. But I wanted to
-learn how the Firebase Admin SDK works with Go, and this was the excuse.
-The app would be better if it used a simple file store or even Postgres.
-But it doesn't. It uses Firestore. I made that choice and I'm living with
-it.
+SQLite is simpler than Firestore. No indexes to manage, no billing surprises,
+no "document size limit." A single `canvas.db` file with WAL mode handles
+everything I need. And it's backed up with a `cp` command.
 
 ## The Excalidraw CSS Situation
 
@@ -175,39 +313,18 @@ a brutalist override CSS that fixes the aesthetic clash between our sharp
 gothic theme and Excalidraw's rounded-corner default.
 
 If Excalidraw updates their CSS classes between versions, the overrides
-will break. I've accepted this. When it happens, I'll spend an hour
-updating selectors and muttering about CSS specificity. That's a future
-problem. Future me is very understanding.
+will break. I've pinned the version to `0.18.1` to delay this as long as
+possible. When it happens, I'll spend an hour updating selectors and
+muttering about CSS specificity. That's a future problem. Future me is
+very understanding.
 
-## Deploy
+## Design System
 
-The app is a Go binary. You can deploy it anywhere that runs executables:
+"Goth-Brutalist" — sharp corners, hard offset shadows, dark palette.
 
-**Vercel:** Not natively (it's a long-running server, not serverless), but
-can be adapted with a Vercel Go adapter. Or just use a $5 VPS.
-
-**Render / Fly.io:** Works out of the box. Set the start command to the
-binary path, set `PORT` env var, done.
-
-**A VPS:** `scp` the binary, run it with systemd, forget about it for 18
-months until a Go security patch forces you to rebuild.
-
-You need:
-- A Firebase project with Auth (Google sign-in) and Firestore enabled
-- A service account key (JSON) in the project root
-- The web config in the Firestore console
-
-See the Firebase setup doc if that sounded like a list of chores. It is.
-But you only do it once.
-
-## Environment Variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `PORT` | No (default: 3000) | HTTP listen port |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Yes | Path to Firebase service account JSON |
-
-The service account JSON file is auto-detected by scanning for
-`-firebase-adminsdk-*.json` in the working directory. If you have exactly
-one such file, it gets picked up. If you have zero or more than one, the
-app yells at you.
+- **Fonts:** Cinzel (headings), Inter (body), Fira Code (mono)
+- **Borders:** 2px solid, always
+- **Shadows:** Hard offset (`4px 4px 0px`), no blur
+- **Colors:** Dark backgrounds, crimson/lavender accents, high contrast
+- **Buttons:** Translate on active (`translate-x-0.5 translate-y-0.5`), shadow disappears
+- **Radius:** Zero. Everywhere. No exceptions.
