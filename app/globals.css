@@ -61,7 +61,7 @@ body {
   background-color: var(--bg);
   color: var(--fg);
   transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Space Mono', monospace;
   line-height: 1.5;
   background-image: 
     linear-gradient(to right, rgba(136, 57, 239, 0.12) 1px, transparent 1px),
@@ -78,10 +78,10 @@ body {
 
 /* ─── Typography ─────────────────────────────────── */
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Cinzel', serif;
+  font-family: 'Bungee', cursive;
   letter-spacing: -0.01em;
-  font-weight: 900;
-  line-height: 0.95;
+  font-weight: 400;
+  line-height: 1.1;
   text-transform: uppercase;
 }
 

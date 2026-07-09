@@ -1,10 +1,8 @@
 package app
 
-import "gotth/app/components"
-
-templ featureCard(icon templ.Component, title string, desc string) {
-	<div class="border-2 border-[var(--border)] p-6 shadow-[4px_4px_0px_0px_var(--border)] transition-all hover:shadow-[6px_6px_0px_0px_var(--accent)] hover:-translate-x-0.5 hover:-translate-y-0.5">
-		<div class="mb-4 flex h-10 w-10 items-center justify-center border-2 border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--accent)]">
+templ featureCard(icon templ.Component, title string, desc string, color string) {
+	<div class={ "border-2 border-[var(--border)] p-6 shadow-[4px_4px_0px_0px_var(--border)] transition-all hover:-translate-x-0.5 hover:-translate-y-0.5", "hover:shadow-[6px_6px_0px_0px_" + color + "]" }>
+		<div class={ "mb-4 flex h-10 w-10 items-center justify-center border-2 shadow-[2px_2px_0px_0px_" + color + "]", "border-[" + color + "] bg-[" + color + "] text-[var(--accent-fg)]" }>
 			@icon
 		</div>
 		<h3 class="text-sm font-black uppercase tracking-wider">{ title }</h3>
@@ -48,71 +46,130 @@ templ LandingPage() {
 		<!-- Hero -->
 		<section class="relative overflow-hidden">
 			<div class="pointer-events-none absolute inset-0 -z-10">
-				<div class="absolute -top-24 -right-24 h-96 w-96 rotate-12 border-2 border-[var(--mauve)]/10"></div>
-				<div class="absolute -bottom-24 -left-24 h-80 w-80 -rotate-6 border-2 border-[var(--blue)]/10"></div>
-				<div class="absolute left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-[var(--pink)]/5"></div>
+				<div class="absolute -top-24 -right-24 h-96 w-96 rotate-12 border-2 border-[var(--mauve)]/15"></div>
+				<div class="absolute -bottom-24 -left-24 h-80 w-80 -rotate-6 border-2 border-[var(--blue)]/15"></div>
+				<div class="absolute left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-[var(--pink)]/10"></div>
+				<div class="absolute top-1/4 left-1/4 h-32 w-32 rotate-45 border-2 border-[var(--teal)]/10"></div>
+				<div class="absolute bottom-1/4 right-1/4 h-24 w-24 -rotate-12 border-2 border-[var(--peach)]/10"></div>
 			</div>
 
 			<div class="mx-auto max-w-5xl px-6 pb-32 pt-36 lg:px-8">
 				<div class="text-center">
-					@components.Logo()
-
 					<h1 class="mt-12 text-4xl font-black uppercase leading-none tracking-tighter sm:text-5xl md:text-6xl lg:text-7xl">
 						<span class="text-[var(--accent)]">Ingin Menjadi Programmer</span><br/>
 						<span>Handal Namun Enggan</span><br/>
 						<span class="text-[var(--mauve)]">Subscribe Excalidraw</span>
 					</h1>
 					<p class="mt-6 text-base font-bold uppercase tracking-wider text-[var(--fg-muted)]">
-						*well not really, but you can share
+						Draw boxes. Connect them. Call it architecture.
 					</p>
 					<p class="mx-auto mt-4 max-w-xl text-sm font-medium text-[var(--fg-muted)] leading-relaxed">
-						An infinite canvas in your browser. Powered by Excalidraw &bull; Saved to the cloud &bull; Shareable in a click.
+						Draw boxes. Draw arrows. Draw diagrams that make your team think you're productive. No subscription. No "upgrade to unlock more colors." Just draw.
 					</p>
 
-					<div class="mt-10 flex items-center justify-center gap-4">
+					<div class="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
 						<button
 							onclick="signInWithGoogle()"
 							class="inline-flex h-12 items-center gap-2 border-2 border-[var(--accent)] bg-[var(--accent)] px-8 text-sm font-bold uppercase tracking-wider text-[var(--accent-fg)] shadow-[4px_4px_0px_0px_var(--accent)] transition-all hover:bg-[var(--mauve)] hover:shadow-[6px_6px_0px_0px_var(--mauve)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
 						>
-							Start Drawing
+							Draw Something
 							<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
 								<path stroke-linecap="square" stroke-linejoin="miter" d="M5 12h14m-7-7l7 7-7 7"/>
 							</svg>
 						</button>
+						<a
+							href="#features"
+							class="inline-flex h-12 items-center gap-2 border-2 border-[var(--border)] px-8 text-sm font-bold uppercase tracking-wider text-[var(--fg)] transition-all hover:bg-[var(--bg-subtle)] hover:shadow-[2px_2px_0px_0px_var(--border)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+						>
+							See What's Inside
+						</a>
 					</div>
 				</div>
 			</div>
 		</section>
 
 		<!-- Features -->
-		<section class="border-t-2 border-[var(--border)]">
+		<section id="features" class="border-t-2 border-[var(--border)]">
 			<div class="mx-auto max-w-6xl px-6 py-24 lg:px-8">
 				<div class="mb-16 text-center">
 					<h2 class="text-sm font-black uppercase tracking-[0.2em] text-[var(--fg-muted)]">Everything you need</h2>
 					<p class="mt-2 text-3xl font-black uppercase tracking-tighter">Nothing you don't</p>
 				</div>
 				<div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-					@featureCard(iconCanvas(), "Infinite Canvas", "Powered by Excalidraw. Draw diagrams, sketches, wireframes — anything you can imagine.")
-					@featureCard(iconCloud(), "Auto-saved", "Every stroke is saved to the cloud. Never lose your work — it's always there when you come back.")
-					@featureCard(iconShare(), "Share Instantly", "Generate a share link with one click. Anyone with the link can view your drawing — no account needed.")
-					@featureCard(iconMoon(), "Dark Mode", "Toggle between Latte and Mocha themes. Built for late-night brainstorming sessions.")
+					@featureCard(iconCanvas(), "Draw Forever", "No canvas size limits. No 'your trial has expired.' Just an infinite canvas waiting for your stick figures.", "var(--accent)")
+					@featureCard(iconCloud(), "Autosave", "Every stroke saved to SQLite. Your masterpiece is safe even if your browser decides to update itself mid-doodle.", "var(--blue)")
+					@featureCard(iconShare(), "One-Click Share", "Generate a link. Send it. They view it. No account required. No 'request access and wait 3 business days.'", "var(--teal)")
+					@featureCard(iconMoon(), "Light & Dark", "Catppuccin Latte for the morning people. Mocha for the night owls. Toggle with one click. No premium theme store.", "var(--pink)")
 				</div>
 			</div>
 		</section>
 
-		<!-- CTA -->
+		<!-- How It Works -->
 		<section class="border-t-2 border-[var(--border)] bg-[var(--bg-subtle)]">
-			<div class="mx-auto max-w-3xl px-6 py-24 lg:px-8 text-center">
-				<h2 class="text-4xl font-black uppercase tracking-tighter">Ready to draw?</h2>
+			<div class="mx-auto max-w-5xl px-6 py-24 lg:px-8">
+				<div class="mb-16 text-center">
+					<h2 class="text-sm font-black uppercase tracking-[0.2em] text-[var(--fg-muted)]">How it works</h2>
+					<p class="mt-2 text-3xl font-black uppercase tracking-tighter">Three steps. No PhD required.</p>
+				</div>
+				<div class="grid gap-8 sm:grid-cols-3">
+					<div class="text-center">
+						<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center border-2 border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)] text-lg font-black shadow-[2px_2px_0px_0px_var(--accent)]">1</div>
+						<h3 class="text-sm font-black uppercase tracking-wider">Sign In</h3>
+						<p class="mt-2 text-xs font-medium text-[var(--fg-muted)]">Google account. That's it. We don't want your credit card.</p>
+					</div>
+					<div class="text-center">
+						<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center border-2 border-[var(--blue)] bg-[var(--blue)] text-[var(--accent-fg)] text-lg font-black shadow-[2px_2px_0px_0px_var(--blue)]">2</div>
+						<h3 class="text-sm font-black uppercase tracking-wider">Draw</h3>
+						<p class="mt-2 text-xs font-medium text-[var(--fg-muted)]">Boxes, arrows, stick figures, flowcharts. We don't judge.</p>
+					</div>
+					<div class="text-center">
+						<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center border-2 border-[var(--teal)] bg-[var(--teal)] text-[var(--accent-fg)] text-lg font-black shadow-[2px_2px_0px_0px_var(--teal)]">3</div>
+						<h3 class="text-sm font-black uppercase tracking-wider">Share</h3>
+						<p class="mt-2 text-xs font-medium text-[var(--fg-muted)]">One click. Link generated. Send it to whoever. No account needed.</p>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- Tech Stack -->
+		<section class="border-t-2 border-[var(--border)]">
+			<div class="mx-auto max-w-5xl px-6 py-24 lg:px-8">
+				<div class="mb-16 text-center">
+					<h2 class="text-sm font-black uppercase tracking-[0.2em] text-[var(--fg-muted)]">The stack</h2>
+					<p class="mt-2 text-3xl font-black uppercase tracking-tighter">GOTTH. No node_modules.</p>
+				</div>
+				<div class="flex flex-wrap items-center justify-center gap-3">
+					<span class="border-2 border-[var(--accent)] bg-[var(--accent)] px-4 py-2 text-xs font-black uppercase tracking-wider text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--accent)]">Go</span>
+					<span class="border-2 border-[var(--blue)] bg-[var(--blue)] px-4 py-2 text-xs font-black uppercase tracking-wider text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--blue)]">Templ</span>
+					<span class="border-2 border-[var(--teal)] bg-[var(--teal)] px-4 py-2 text-xs font-black uppercase tracking-wider text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--teal)]">HTMX</span>
+					<span class="border-2 border-[var(--pink)] bg-[var(--pink)] px-4 py-2 text-xs font-black uppercase tracking-wider text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--pink)]">Tailwind</span>
+					<span class="border-2 border-[var(--mauve)] bg-[var(--mauve)] px-4 py-2 text-xs font-black uppercase tracking-wider text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--mauve)]">SQLite</span>
+					<span class="border-2 border-[var(--lavender)] bg-[var(--lavender)] px-4 py-2 text-xs font-black uppercase tracking-wider text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--lavender)]">Excalidraw</span>
+				</div>
+				<p class="mt-8 text-center text-xs font-medium text-[var(--fg-muted)]">
+					Compiles to a single binary. Deploys with <code class="border-2 border-[var(--border)] bg-[var(--bg-subtle)] px-1.5 py-0.5 text-[var(--fg)] font-bold">scp</code>. Uses 16MB of RAM. That's less than your browser tabs.
+				</p>
+			</div>
+		</section>
+
+		<!-- CTA -->
+		<section class="border-t-2 border-[var(--border)]">
+			<div class="relative mx-auto max-w-3xl px-6 py-24 lg:px-8 text-center">
+				<div class="pointer-events-none absolute inset-0 -z-10">
+					<div class="absolute -top-12 -right-12 h-48 w-48 rotate-12 border-2 border-[var(--accent)]/10"></div>
+					<div class="absolute -bottom-12 -left-12 h-40 w-40 -rotate-6 border-2 border-[var(--blue)]/10"></div>
+				</div>
+				<h2 class="text-4xl font-black uppercase tracking-tighter">Stop Subscribing.</h2>
+				<h2 class="text-4xl font-black uppercase tracking-tighter text-[var(--accent)]">Start Drawing.</h2>
 				<p class="mt-4 text-sm font-bold uppercase tracking-wider text-[var(--fg-muted)]">
-					Sign in with Google and start creating in seconds.
+					No credit card. No trial. No "premium canvas textures." Just a canvas.
 				</p>
 				<button
 					onclick="signInWithGoogle()"
-					class="mt-8 inline-flex h-12 items-center gap-2 border-2 border-[var(--accent)] bg-[var(--accent)] px-8 text-sm font-bold uppercase tracking-wider text-[var(--accent-fg)] shadow-[4px_4px_0px_0px_var(--accent)] transition-all hover:bg-[var(--mauve)] hover:shadow-[6px_6px_0px_0px_var(--mauve)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+					class="mt-8 inline-flex h-14 items-center gap-2 border-2 border-[var(--accent)] bg-[var(--accent)] px-10 text-base font-bold uppercase tracking-wider text-[var(--accent-fg)] shadow-[6px_6px_0px_0px_var(--accent)] transition-all hover:bg-[var(--mauve)] hover:shadow-[8px_8px_0px_0px_var(--mauve)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
 				>
-					Get Started
-					<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+					Draw Something
+					<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
 						<path stroke-linecap="square" stroke-linejoin="miter" d="M5 12h14m-7-7l7 7-7 7"/>
 					</svg>
 				</button>
