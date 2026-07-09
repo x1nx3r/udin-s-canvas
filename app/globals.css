@@ -48,6 +48,7 @@ html {
 body {
   background-color: var(--bg);
   color: var(--fg);
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   background-image: 

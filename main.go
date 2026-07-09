@@ -11,7 +11,6 @@ import (
 	"gotth/app/auth"
 	"gotth/app/canvas"
 	"gotth/app/dashboard"
-	"gotth/app/docs"
 	"gotth/app/profile"
 	_ "github.com/a-h/templ"
 )
@@ -61,10 +60,6 @@ func main() {
 
 	// Profile
 	mux.Handle("GET /profile", auth.RequireAuth(profile.PageHandler))
-
-	// Docs
-	mux.HandleFunc("GET /docs", docs.PageHandler)
-	mux.HandleFunc("GET /docs/{slug}", docs.PageHandler)
 
 	wrapped := auth.Middleware(mux)
 

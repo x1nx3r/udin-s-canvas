@@ -29,7 +29,15 @@ func Navigation(currentPath string) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<header class=\"sticky top-0 z-50 w-full border-b-2 border-[var(--border)] bg-[var(--bg)]/95\"><div class=\"mx-auto flex h-14 max-w-7xl items-center justify-between px-6 lg:px-8\"><!-- Logo --><a href=\"/\" class=\"flex items-center gap-2.5 font-black tracking-tight text-[var(--fg)] select-none\"><img src=\"/static/goth_lady_logo.jpg\" class=\"h-8 w-8 border-2 border-[var(--border)] object-cover mix-blend-multiply dark:invert dark:mix-blend-screen\" alt=\"Gothic Lady Logo\"> <span class=\"text-sm font-bold uppercase tracking-wider\">Canvas</span></a><!-- Right controls --><div class=\"flex items-center gap-3\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<header class=\"sticky top-0 z-50 w-full border-b-2 border-[var(--border)] bg-[var(--bg)]/95\"><div class=\"mx-auto flex h-14 max-w-7xl items-center justify-between px-6 lg:px-8\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = Logo().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<!-- Right controls --><div class=\"flex items-center gap-3\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -37,7 +45,7 @@ func Navigation(currentPath string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<div id=\"auth-bar\" hx-get=\"/auth/user\" hx-trigger=\"load\" hx-swap=\"outerHTML\"></div><button id=\"theme-toggle\" onclick=\"toggleTheme()\" class=\"flex h-8 w-8 items-center justify-center border-2 border-[var(--border)] bg-[var(--bg)] text-[var(--fg)] hover:bg-[var(--bg-subtle)] cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[2px_2px_0px_0px_var(--border)]\" aria-label=\"Toggle dark mode\"><svg class=\"hidden dark:block h-4 w-4\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\" stroke-width=\"2.5\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z\"></path></svg> <svg class=\"block dark:hidden h-4 w-4\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\" stroke-width=\"2.5\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z\"></path></svg></button></div></div></header><script>\n\t\tfunction toggleTheme() {\n\t\t\tif (document.startViewTransition) {\n\t\t\t\tdocument.startViewTransition(() => {\n\t\t\t\t\tvar isDark = document.documentElement.classList.toggle('dark');\n\t\t\t\t\tlocalStorage.setItem('theme', isDark ? 'dark' : 'light');\n\t\t\t\t});\n\t\t\t} else {\n\t\t\t\tvar isDark = document.documentElement.classList.toggle('dark');\n\t\t\t\tlocalStorage.setItem('theme', isDark ? 'dark' : 'light');\n\t\t\t}\n\t\t}\n\t</script>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div id=\"auth-bar\" hx-get=\"/auth/user\" hx-trigger=\"load\" hx-swap=\"outerHTML\"></div><button id=\"theme-toggle\" onclick=\"toggleTheme()\" class=\"flex h-8 w-8 items-center justify-center border-2 border-[var(--border)] bg-[var(--bg)] text-[var(--fg)] hover:bg-[var(--bg-subtle)] cursor-pointer transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[2px_2px_0px_0px_var(--border)]\" aria-label=\"Toggle dark mode\"><svg class=\"hidden dark:block h-4 w-4\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\" stroke-width=\"2.5\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z\"></path></svg> <svg class=\"block dark:hidden h-4 w-4\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\" stroke-width=\"2.5\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z\"></path></svg></button></div></div></header><script>\n\t\tfunction toggleTheme() {\n\t\t\tvar isDark = document.documentElement.classList.toggle('dark');\n\t\t\tlocalStorage.setItem('theme', isDark ? 'dark' : 'light');\n\t\t\t// Notify Excalidraw instance if present\n\t\t\tif (window.excalidrawAPI) {\n\t\t\t\twindow.excalidrawAPI.updateScene({ appState: { theme: isDark ? 'dark' : 'light' } });\n\t\t\t}\n\t\t}\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -74,20 +82,20 @@ func navLink(href string, currentPath string, label string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<a href=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<a href=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var4 templ.SafeURL
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(href))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/components/navigation.templ`, Line: 52, Col: 28}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/components/navigation.templ`, Line: 45, Col: 28}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "\" class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\" class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -100,20 +108,20 @@ func navLink(href string, currentPath string, label string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/components/navigation.templ`, Line: 59, Col: 9}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/components/navigation.templ`, Line: 52, Col: 9}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "</a>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</a>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
