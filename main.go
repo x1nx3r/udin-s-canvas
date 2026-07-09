@@ -53,6 +53,7 @@ func main() {
 	mux.Handle("POST /api/draw/{id}/share", auth.RequireAuth(canvas.ShareHandler))
 	mux.Handle("PUT /api/draw/{id}/rename", auth.RequireAuth(canvas.RenameHandler))
 	mux.Handle("POST /api/draw/{id}/thumbnail", auth.RequireAuth(canvas.ThumbnailHandler))
+	mux.Handle("DELETE /api/draw/{id}", auth.RequireAuth(canvas.DeleteHandler))
 
 	// Shared (public read-only)
 	mux.HandleFunc("GET /shared/{slug}", canvas.SharedPageHandler)

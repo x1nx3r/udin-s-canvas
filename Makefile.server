@@ -1,0 +1,36 @@
+# Server-side Atomic Shift Orchestrator for Udin's Canvas
+APP_ROOT    := /var/www/udin-canvas
+RELEASE_DIR := $(shell pwd)
+CURRENT_DIR := $(APP_ROOT)/current
+KEEP_RELEASES := 5
+
+.PHONY: deploy publish restart clean-old
+
+deploy: publish restart clean-old
+
+publish:
+	@echo "-> Atomic shift: Pointing Caddy to new release..."
+	@ln -nfs $(RELEASE_DIR) $(CURRENT_DIR)
+
+restart:
+	@echo "-> Bouncing the systemd service..."
+	@sudo systemctl restart udin-canvas
+
+clean-old:
+	@echo "-> Compressing past releases..."
+	@mkdir -p $(APP_ROOT)/archives
+	@releases=$$(ls -dt $(APP_ROOT)/releases/*/ 2>/dev/null | tail -n +$$(expr $(KEEP_RELEASES) + 1)); \
+	if [ -n "$$releases" ]; then \
+		for dir in $$releases; do \
+			name=$$(basename "$$dir"); \
+			size_before=$$(du -sh "$$dir" 2>/dev/null | cut -f1); \
+			start_time=$$(date +%s); \
+			tar -cf - -C $(APP_ROOT)/releases "$$name" | xz -3 -T1 > $(APP_ROOT)/archives/$$name.tar.xz; \
+			duration=$$(( $$(date +%s) - start_time )); \
+			size_after=$$(du -sh $(APP_ROOT)/archives/$$name.tar.xz 2>/dev/null | cut -f1); \
+			echo "   [CRUSHED] $$name ($$size_before) -> $$name.tar.xz ($$size_after) in $${duration}s"; \
+			rm -rf "$$dir"; \
+		done; \
+	else \
+		echo "   No old releases to archive."; \
+	fi

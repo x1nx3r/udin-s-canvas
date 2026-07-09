@@ -26,6 +26,12 @@ templ DashboardPage(drawings []Drawing) {
 					messagingSenderId: "384877248276",
 					appId: "1:384877248276:web:61d08dffd5f19d0f358c01",
 				});
+				(function() {
+					var t = localStorage.getItem('theme');
+					if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+						document.documentElement.classList.add('dark');
+					}
+				})();
 			</script>
 		</head>
 		<body hx-boost="true" hx-swap="innerHTML transition:true" class="min-h-full flex flex-col bg-[var(--bg)] text-[var(--fg)] antialiased">
