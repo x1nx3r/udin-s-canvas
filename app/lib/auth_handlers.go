@@ -68,18 +68,22 @@ func UserHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html")
 	if uid == "" {
-		w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` +
-			`<button onclick="signInWithGoogle()" class="` + navBtnClass + `">Sign In</button>` +
-			`</div>`))
+		signInBtn := `<button onclick="signInWithGoogle()" class="` + navBtnClass + `">Sign In</button>`
+		w.Write([]byte(
+			`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` + signInBtn + `</div>` +
+			`<div id="auth-bar-mobile" hx-swap-oob="true" class="flex flex-col gap-2">` + signInBtn + `</div>`,
+		))
 		return
 	}
 
 	user, err := FirebaseAuth.GetUser(r.Context(), uid)
 	if err != nil {
 		log.Printf("get user: %v", err)
-		w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` +
-			`<button onclick="signInWithGoogle()" class="` + navBtnClass + `">Sign In</button>` +
-			`</div>`))
+		signInBtn := `<button onclick="signInWithGoogle()" class="` + navBtnClass + `">Sign In</button>`
+		w.Write([]byte(
+			`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` + signInBtn + `</div>` +
+			`<div id="auth-bar-mobile" hx-swap-oob="true" class="flex flex-col gap-2">` + signInBtn + `</div>`,
+		))
 		return
 	}
 
@@ -88,13 +92,27 @@ func UserHandler(w http.ResponseWriter, r *http.Request) {
 		name = user.Email
 	}
 
-	w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` +
+	desktop := `<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` +
 		`<span class="text-xs font-bold text-[var(--fg-muted)]">` + name + `</span>` +
 		`<a href="/profile" class="h-8 w-8 border-2 border-[var(--border)] overflow-hidden shrink-0">` +
 		`<img src="` + user.PhotoURL + `" alt="" class="h-full w-full object-cover"/>` +
 		`</a>` +
-		`<form method="POST" action="/auth/logout" hx-boost="false">` +
+		`<form method="POST" action="/auth/logout">` +
 		`<button type="submit" class="` + navBtnClass + `">Logout</button>` +
 		`</form>` +
-		`</div>`))
+		`</div>`
+
+	mobile := `<div id="auth-bar-mobile" hx-swap-oob="true" class="flex flex-col gap-3">` +
+		`<div class="flex items-center gap-2">` +
+		`<a href="/profile" class="h-8 w-8 border-2 border-[var(--border)] overflow-hidden shrink-0">` +
+		`<img src="` + user.PhotoURL + `" alt="" class="h-full w-full object-cover"/>` +
+		`</a>` +
+		`<span class="text-xs font-bold text-[var(--fg)]">` + name + `</span>` +
+		`</div>` +
+		`<form method="POST" action="/auth/logout">` +
+		`<button type="submit" class="` + navBtnClass + ` w-full">Logout</button>` +
+		`</form>` +
+		`</div>`
+
+	w.Write([]byte(desktop + mobile))
 }

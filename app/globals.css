@@ -2,7 +2,7 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-@source "./**/*.templ";
+/* Auto-generated: do not edit. Run `make generate-css` to update. */
 
 /* ─── Design Tokens (Catppuccin Brutalist) ─────────── */
 :root {
@@ -77,6 +77,14 @@ body {
 }
 
 /* ─── Typography ─────────────────────────────────── */
+.font-mono-brand {
+  font-family: 'Space Mono', monospace;
+}
+
+.font-display {
+  font-family: 'Bungee', cursive;
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: 'Bungee', cursive;
   letter-spacing: -0.01em;

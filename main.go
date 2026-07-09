@@ -28,9 +28,11 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// Globals CSS (embedded binary)
+	// Globals CSS (embedded binary) with cache busting
 	mux.Handle("GET /globals.css", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css")
+		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		w.Header().Set("ETag", `"`+assets.CSSHash+`"`)
 		w.Write(assets.CSS)
 	}))
 
@@ -40,7 +42,13 @@ func main() {
 		log.Fatal(err)
 	}
 	fileServer := http.FileServer(http.FS(publicFS))
-	mux.Handle("GET /static/", http.StripPrefix("/static/", fileServer))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add cache busting for CSS files
+		if len(r.URL.Path) > 4 && r.URL.Path[len(r.URL.Path)-4:] == ".css" {
+			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		}
+		fileServer.ServeHTTP(w, r)
+	})))
 
 	// Auth
 	mux.HandleFunc("POST /auth/login", lib.LoginHandler)

@@ -12,9 +12,11 @@ templ SharedPage(title string, slug string) {
 			#canvas-mount { width: 100vw; height: calc(100vh - 56px); min-height: 200px; }
 		</style>
 		<header class="sticky top-0 z-50 w-full border-b-2 border-[var(--border)] bg-[var(--bg)]/95">
-			<div class="mx-auto flex h-14 max-w-7xl items-center justify-between px-6 lg:px-8">
-				@components.Logo()
-				<span class="text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)]">Read-only view</span>
+			<div class="mx-auto flex h-14 max-w-7xl items-center justify-between px-3 sm:px-6 lg:px-8">
+				<div class="hidden sm:block">
+					@components.Logo()
+				</div>
+				<span class="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)]">Read-only view</span>
 			</div>
 		</header>
 		<div id="canvas-mount" data-slug={ slug }></div>

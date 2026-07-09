@@ -12,7 +12,7 @@ templ CanvasPage(title string, drawingId string) {
 			<link rel="icon" type="image/svg+xml" href="/static/logo.svg"/>
 			<link rel="preconnect" href="https://fonts.googleapis.com"/>
 			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
-			<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;700&display=swap" rel="stylesheet"/>
+			<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 			<link rel="stylesheet" href="/globals.css"/>
 			<link rel="stylesheet" href="/static/excalidraw.css"/>
 			<link rel="stylesheet" href="/static/excalidraw-brutalist.css"/>
@@ -31,13 +31,17 @@ templ CanvasPage(title string, drawingId string) {
 			</style>
 		</head>
 		<body class="h-full bg-[var(--bg)] text-[var(--fg)] antialiased">
-			<div class="flex items-center gap-3 px-6 h-14 border-b-2 border-[var(--border)] bg-[var(--bg)]/95" id="title-bar">
-				@components.Logo()
+			<div class="flex items-center gap-2 sm:gap-3 px-3 sm:px-6 h-14 border-b-2 border-[var(--border)] bg-[var(--bg)]/95" id="title-bar">
+				<div class="hidden sm:block">
+					@components.Logo()
+				</div>
 				<input id="title-input" type="text" value={ title } onchange="renameDrawing(this.value)"
-					class="flex-1 bg-transparent text-sm font-bold uppercase tracking-wider border-none outline-none text-[var(--fg)]"/>
-				<button onclick="saveDrawing()" class="px-3 py-1.5 border-2 border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)] text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[var(--mauve)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[2px_2px_0px_0px_var(--accent)]">Save</button>
-				<button id="share-btn" onclick="shareDrawing()" class="px-3 py-1.5 border-2 border-[var(--border)] text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[var(--bg-subtle)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[2px_2px_0px_0px_var(--border)]">Share</button>
-				@components.NavLink("/drawings", "", "Drawings")
+					class="flex-1 min-w-0 bg-transparent text-xs sm:text-sm font-bold uppercase tracking-wider border-none outline-none text-[var(--fg)]"/>
+				<button onclick="saveDrawing()" class="px-2 sm:px-3 py-1.5 border-2 border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)] text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[var(--mauve)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[2px_2px_0px_0px_var(--accent)]">Save</button>
+				<button id="share-btn" onclick="shareDrawing()" class="px-2 sm:px-3 py-1.5 border-2 border-[var(--border)] text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-[var(--bg-subtle)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[2px_2px_0px_0px_var(--border)]">Share</button>
+				<div class="hidden md:block">
+					@components.NavLink("/drawings", "", "Drawings")
+				</div>
 				<div id="auth-bar" hx-get="/auth/user" hx-trigger="load" hx-swap="outerHTML"></div>
 				<button
 					id="theme-toggle"

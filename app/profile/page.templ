@@ -7,23 +7,23 @@ import (
 
 templ ProfilePage(name string, photoURL string, drawings []DrawingItem) {
 	@app.Layout(name+" — Ingin Menjadi Programmer Handal Namun Enggan Subscribe Excalidraw", "/profile") {
-		<main class="flex-1 mx-auto w-full max-w-4xl px-6 py-12">
-			<div class="flex items-center gap-6 mb-12">
+		<main class="flex-1 mx-auto w-full max-w-4xl px-4 sm:px-6 py-8 sm:py-12">
+			<div class="flex items-center gap-4 sm:gap-6 mb-8 sm:mb-12">
 				if photoURL != "" {
-					<img src={ photoURL } alt="" class="h-16 w-16 border-2 border-[var(--border)] object-cover"/>
+					<img src={ photoURL } alt="" class="h-12 w-12 sm:h-16 sm:w-16 border-2 border-[var(--border)] object-cover"/>
 				}
 				<div>
-					<h1 class="text-2xl font-black uppercase tracking-tight">{ name }</h1>
-					<p class="text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)] mt-1">{ len(drawings) } { drawingLabel(len(drawings)) }</p>
+					<h1 class="text-xl sm:text-2xl font-black uppercase tracking-tight">{ name }</h1>
+					<p class="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)] mt-1">{ len(drawings) } { drawingLabel(len(drawings)) }</p>
 				</div>
 			</div>
-			<div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+			<div class="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
 				for _, d := range drawings {
 					@components.DrawingCard(d.ID, d.Title, d.UpdatedAt, d.Thumbnail)
 				}
 				if len(drawings) == 0 {
-					<div class="col-span-full text-center py-16">
-						<p class="text-sm font-bold uppercase tracking-wider text-[var(--fg-muted)]">No drawings yet</p>
+					<div class="col-span-full text-center py-10 sm:py-16">
+						<p class="text-xs sm:text-sm font-bold uppercase tracking-wider text-[var(--fg-muted)]">No drawings yet</p>
 						<a href="/drawings" class="mt-4 inline-block px-4 py-2 border-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider hover:bg-[var(--bg-subtle)] transition-all">Go to dashboard</a>
 					</div>
 				}

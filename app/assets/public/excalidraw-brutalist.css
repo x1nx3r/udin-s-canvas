@@ -1,56 +1,130 @@
-/* Excalidraw → Colorful Brutalist overrides
-   Load after excalidraw.css */
+/* Excalidraw → Catppuccin Brutalist overrides
+   Load after excalidraw.css
+   Only override UI chrome, NEVER touch canvas interaction */
 
-/* ─── Theme color overrides (CSS variables) ─── */
+/* ─── Catppuccin Palette (re-declared for Excalidraw scope) ─── */
 .excalidraw {
-  --island-bg-color: var(--bg);
-  --popup-bg-color: var(--bg);
-  --default-bg-color: var(--bg);
-  --input-bg-color: var(--bg-subtle);
-  --input-hover-bg-color: var(--bg-subtle);
-  --input-border-color: var(--border);
-  --button-hover-bg: var(--bg-subtle);
-  --button-active-bg: var(--bg-subtle);
-  --color-surface-high: var(--bg-subtle);
-  --color-surface-mid: var(--bg);
-  --color-surface-low: var(--bg-subtle);
-  --color-surface-lowest: var(--bg);
-  --color-on-surface: var(--fg);
-  --text-primary-color: var(--fg);
-  --icon-fill-color: var(--fg);
-  --keybinding-color: var(--fg-muted);
-  --link-color: var(--accent);
-  --ui-font: 'Inter', system-ui, -apple-system, sans-serif;
+  --ctp-rosewater: #dc8a78;
+  --ctp-flamingo:  #dd7878;
+  --ctp-pink:      #ea76cb;
+  --ctp-mauve:     #8839ef;
+  --ctp-red:       #d20f39;
+  --ctp-maroon:    #e64553;
+  --ctp-peach:     #fe640b;
+  --ctp-yellow:    #df8e1d;
+  --ctp-green:     #40a02b;
+  --ctp-teal:      #179299;
+  --ctp-sky:       #04a5e5;
+  --ctp-sapphire:  #209fb5;
+  --ctp-blue:      #1e66f5;
+  --ctp-lavender:  #7287fd;
+  --ctp-text:      #4c4f69;
+  --ctp-subtext1:  #5c5f77;
+  --ctp-subtext0:  #6c6f85;
+  --ctp-overlay2:  #7c7f93;
+  --ctp-overlay1:  #8c8fa1;
+  --ctp-overlay0:  #9ca0b0;
+  --ctp-surface2:  #acb0be;
+  --ctp-surface1:  #bcc0cc;
+  --ctp-surface0:  #ccd0da;
+  --ctp-base:      #dce0e8;
+  --ctp-mantle:    #e6e9ef;
+  --ctp-crust:     #dce0e8;
+}
+.excalidraw.dark {
+  --ctp-rosewater: #f5e0dc;
+  --ctp-flamingo:  #f2cdcd;
+  --ctp-pink:      #f5c2e7;
+  --ctp-mauve:     #cba6f7;
+  --ctp-red:       #f38ba8;
+  --ctp-maroon:    #eba0ac;
+  --ctp-peach:     #fab387;
+  --ctp-yellow:    #f9e2af;
+  --ctp-green:     #a6e3a1;
+  --ctp-teal:      #94e2d5;
+  --ctp-sky:       #89dceb;
+  --ctp-sapphire:  #74c7ec;
+  --ctp-blue:      #89b4fa;
+  --ctp-lavender:  #b4befe;
+  --ctp-text:      #cdd6f4;
+  --ctp-subtext1:  #bac2de;
+  --ctp-subtext0:  #a6adc8;
+  --ctp-overlay2:  #9399b2;
+  --ctp-overlay1:  #7f849c;
+  --ctp-overlay0:  #6c7086;
+  --ctp-surface2:  #585b70;
+  --ctp-surface1:  #45475a;
+  --ctp-surface0:  #313244;
+  --ctp-base:      #1e1e2e;
+  --ctp-mantle:    #181825;
+  --ctp-crust:     #11111b;
+}
+
+/* ─── Excalidraw canvas: reset inherited font ─── */
+.excalidraw,
+.excalidraw .text-editor,
+.excalidraw .text-editor-container,
+.excalidraw [data-type="text"],
+.excalidraw .excalidraw__canvas {
+  font-family: 'Virgil', 'Excalidraw', 'Comic Sans MS', cursive, sans-serif !important;
+}
+
+/* ─── Excalidraw CSS variable overrides (UI only) ─── */
+.excalidraw {
+  --island-bg-color: var(--ctp-base);
+  --popup-bg-color: var(--ctp-base);
+  --default-bg-color: var(--ctp-base);
+  --input-bg-color: var(--ctp-mantle);
+  --input-hover-bg-color: var(--ctp-surface0);
+  --input-border-color: var(--ctp-overlay0);
+  --button-hover-bg: var(--ctp-surface0);
+  --button-active-bg: var(--ctp-surface1);
+  --color-surface-high: var(--ctp-surface0);
+  --color-surface-mid: var(--ctp-mantle);
+  --color-surface-low: var(--ctp-crust);
+  --color-surface-lowest: var(--ctp-base);
+  --color-on-surface: var(--ctp-text);
+  --text-primary-color: var(--ctp-text);
+  --text-secondary-color: var(--ctp-subtext1);
+  --icon-fill-color: var(--ctp-text);
+  --keybinding-color: var(--ctp-overlay1);
+  --link-color: var(--ctp-blue);
   --border-radius-md: 0px;
   --border-radius-lg: 0px;
-  --shadow-island: 4px 4px 0px 0px var(--border);
-  --modal-shadow: 4px 4px 0px 0px var(--border);
-  --sidebar-shadow: 4px 4px 0px 0px var(--border);
-  --default-border-color: var(--border);
-  --dialog-border-color: var(--border);
+  --shadow-island: 4px 4px 0px 0px var(--ctp-overlay0);
+  --modal-shadow: 4px 4px 0px 0px var(--ctp-overlay0);
+  --sidebar-shadow: 4px 4px 0px 0px var(--ctp-overlay0);
+  --default-border-color: var(--ctp-overlay0);
+  --dialog-border-color: var(--ctp-overlay0);
 }
 
-/* ─── Kill the centered-demo mode on root ─── */
-.excalidraw {
-  min-height: unset !important;
-  padding: 0 !important;
-  align-items: stretch !important;
-  justify-content: flex-start !important;
-}
-
-/* ─── Panels / Islands ─── */
+/* ─── Panels / Islands (UI chrome only) ─── */
 .excalidraw :where(.Island) {
   border-radius: 0 !important;
-  box-shadow: 4px 4px 0px 0px var(--border) !important;
+  box-shadow: 4px 4px 0px 0px var(--ctp-overlay0) !important;
+  border: 2px solid var(--ctp-overlay0) !important;
+  background-color: var(--ctp-base) !important;
 }
 
-/* ─── Buttons ─── */
+/* ─── Top bar / side panel ─── */
+.excalidraw .App-top-bar {
+  border-bottom: 2px solid var(--ctp-overlay0) !important;
+  background-color: var(--ctp-base) !important;
+}
+
+.excalidraw .layer-ui {
+  border-right: 2px solid var(--ctp-overlay0) !important;
+  background-color: var(--ctp-base) !important;
+}
+
+/* ─── Tool icons (UI only, not canvas) ─── */
 .excalidraw :where(.ToolIcon) {
   border-radius: 0 !important;
 }
 
 .excalidraw :where(.ToolIcon__icon) {
   border-radius: 0 !important;
+  color: var(--ctp-text) !important;
 }
 
 .excalidraw :where(.ToolIcon_type_radio, .ToolIcon_type_checkbox) {
@@ -58,73 +132,182 @@
 }
 
 .excalidraw :where(.ToolIcon_type_radio) .ToolIcon__icon {
-  box-shadow: 2px 2px 0px 0px var(--border) !important;
+  box-shadow: 2px 2px 0px 0px var(--ctp-overlay0) !important;
 }
 
 .excalidraw :where(.ToolIcon_type_radio, .ToolIcon_type_checkbox):where(:checked, .active) .ToolIcon__icon {
-  box-shadow: 0px 0px 0px 2px var(--accent), inset 0 0 0 1px var(--accent) !important;
+  box-shadow: 0px 0px 0px 2px var(--ctp-mauve), inset 0 0 0 1px var(--ctp-mauve) !important;
+  background-color: var(--ctp-surface0) !important;
 }
 
+/* ─── Buttons (UI chrome) ─── */
 .excalidraw :where(.excalidraw-button, .ExcButton) {
   border-radius: 0 !important;
-  box-shadow: 2px 2px 0px 0px var(--border) !important;
-  border-width: 2px !important;
+  box-shadow: 2px 2px 0px 0px var(--ctp-overlay0) !important;
+  border: 2px solid var(--ctp-overlay0) !important;
   font-weight: 700 !important;
   text-transform: uppercase !important;
   letter-spacing: 0.05em !important;
   font-size: 0.7rem !important;
+  font-family: 'Space Mono', monospace !important;
+  background-color: var(--ctp-base) !important;
+  color: var(--ctp-text) !important;
+}
+
+.excalidraw :where(.excalidraw-button, .ExcButton):hover {
+  background-color: var(--ctp-surface0) !important;
+  color: var(--ctp-text) !important;
 }
 
 .excalidraw :where(.excalidraw-button, .ExcButton):active {
-  box-shadow: 0px 0px 0px 0px var(--border) !important;
+  box-shadow: 0px 0px 0px 0px var(--ctp-overlay0) !important;
   translate: 2px 2px !important;
 }
 
 .excalidraw button:where(.active, [aria-pressed="true"]) {
   box-shadow: inset 2px 2px 0px 0px rgba(0,0,0,0.15) !important;
+  background-color: var(--ctp-surface0) !important;
 }
 
-/* ─── Chrome borders ─── */
-.excalidraw .App-top-bar {
-  border-bottom: 2px solid var(--border) !important;
-}
-
-.excalidraw .layer-ui {
-  border-right: 2px solid var(--border) !important;
-}
-
-/* ─── Modals ─── */
-.excalidraw :where(.excalidraw-modal, .HelpDialog, .StatsDialog) {
-  border-radius: 0 !important;
-  border: 2px solid var(--border) !important;
-  box-shadow: 4px 4px 0px 0px var(--border) !important;
-}
-
-/* ─── Inputs ─── */
+/* ─── Inputs (UI chrome) ─── */
 .excalidraw input:not([type="radio"]):not([type="checkbox"]),
 .excalidraw textarea,
 .excalidraw select {
   border-radius: 0 !important;
-  border-width: 2px !important;
-  box-shadow: 2px 2px 0px 0px var(--border) !important;
+  border: 2px solid var(--ctp-overlay0) !important;
+  box-shadow: 2px 2px 0px 0px var(--ctp-overlay0) !important;
+  background-color: var(--ctp-mantle) !important;
+  color: var(--ctp-text) !important;
+  font-family: 'Space Mono', monospace !important;
 }
 
-/* ─── Dropdowns ─── */
+.excalidraw input:focus,
+.excalidraw textarea:focus,
+.excalidraw select:focus {
+  border-color: var(--ctp-mauve) !important;
+  box-shadow: 2px 2px 0px 0px var(--ctp-mauve) !important;
+  outline: none !important;
+}
+
+/* ─── Dropdowns (UI chrome) ─── */
 .excalidraw :where(.dropdown-menu, .exc-dropdown) {
   border-radius: 0 !important;
-  border: 2px solid var(--border) !important;
-  box-shadow: 4px 4px 0px 0px var(--border) !important;
+  border: 2px solid var(--ctp-overlay0) !important;
+  box-shadow: 4px 4px 0px 0px var(--ctp-overlay0) !important;
+  background-color: var(--ctp-base) !important;
 }
 
-/* ─── Tooltips ─── */
+/* ─── Modals (UI chrome) ─── */
+.excalidraw :where(.excalidraw-modal, .HelpDialog, .StatsDialog) {
+  border-radius: 0 !important;
+  border: 2px solid var(--ctp-overlay0) !important;
+  box-shadow: 4px 4px 0px 0px var(--ctp-overlay0) !important;
+  background-color: var(--ctp-base) !important;
+  color: var(--ctp-text) !important;
+}
+
+/* ─── Tooltips (UI chrome) ─── */
 .excalidraw :where(.excalidraw-tooltip) {
   border-radius: 0 !important;
-  border: 1px solid var(--border) !important;
+  border: 2px solid var(--ctp-overlay0) !important;
+  background-color: var(--ctp-base) !important;
+  color: var(--ctp-text) !important;
+  font-family: 'Space Mono', monospace !important;
+  box-shadow: 2px 2px 0px 0px var(--ctp-overlay0) !important;
 }
 
-/* ─── Color picker ─── */
+/* ─── Color picker (UI chrome) ─── */
 .excalidraw :where(.color-picker) {
   border-radius: 0 !important;
-  border: 2px solid var(--border) !important;
-  box-shadow: 4px 4px 0px 0px var(--border) !important;
+  border: 2px solid var(--ctp-overlay0) !important;
+  box-shadow: 4px 4px 0px 0px var(--ctp-overlay0) !important;
+  background-color: var(--ctp-base) !important;
+}
+
+/* ─── Context menu (UI chrome) ─── */
+.excalidraw .context-menu {
+  background-color: var(--ctp-base) !important;
+  border: 2px solid var(--ctp-overlay0) !important;
+  box-shadow: 4px 4px 0px 0px var(--ctp-overlay0) !important;
+  border-radius: 0 !important;
+}
+
+.excalidraw .context-menu .context-menu-item {
+  color: var(--ctp-text) !important;
+  font-family: 'Space Mono', monospace !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+.excalidraw .context-menu .context-menu-item:hover {
+  background-color: var(--ctp-surface0) !important;
+  color: var(--ctp-mauve) !important;
+}
+
+/* ─── Sidebar (UI chrome) ─── */
+.excalidraw .side-panel,
+.excalidraw .layer-ui__wrapper__panels {
+  background-color: var(--ctp-base) !important;
+  border-left: 2px solid var(--ctp-overlay0) !important;
+}
+
+/* ─── Scrollbar (UI chrome) ─── */
+.excalidraw ::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+}
+.excalidraw ::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+.excalidraw ::-webkit-scrollbar-thumb {
+  background: var(--ctp-overlay0) !important;
+  border-radius: 0 !important;
+}
+
+/* ─── Spinner ─── */
+.excalidraw .Spinner circle {
+  stroke: var(--ctp-mauve) !important;
+}
+
+/* ─── Font overrides (UI chrome only, NOT canvas text) ─── */
+.excalidraw .excalidraw-button,
+.excalidraw .ExcButton,
+.excalidraw .dropdown-menu .dropdown-menu-item,
+.excalidraw .context-menu .context-menu-item,
+.excalidraw .excalidraw-tooltip,
+.excalidraw .HelpDialog,
+.excalidraw .KeyboardShortcutDialog {
+  font-family: 'Space Mono', monospace !important;
+}
+
+.excalidraw .excalidraw-modal h2,
+.excalidraw .HelpDialog h2 {
+  font-family: 'Bungee', cursive !important;
+}
+
+/* ─── Layer panel rows (UI chrome) ─── */
+.excalidraw .LayersPanel__row {
+  background-color: var(--ctp-base) !important;
+  border: 1px solid transparent !important;
+}
+.excalidraw .LayersPanel__row:hover {
+  background-color: var(--ctp-surface0) !important;
+  border-color: var(--ctp-overlay0) !important;
+}
+.excalidraw .LayersPanel__row.active {
+  background-color: var(--ctp-surface0) !important;
+  border-color: var(--ctp-mauve) !important;
+}
+
+/* ─── Help dialog kbd (UI chrome) ─── */
+.excalidraw .HelpDialog kbd,
+.excalidraw .KeyboardShortcutDialog kbd {
+  background-color: var(--ctp-surface0) !important;
+  border: 2px solid var(--ctp-overlay0) !important;
+  border-radius: 0 !important;
+  box-shadow: 2px 2px 0px 0px var(--ctp-overlay0) !important;
+  font-family: 'Space Mono', monospace !important;
+  color: var(--ctp-text) !important;
 }
