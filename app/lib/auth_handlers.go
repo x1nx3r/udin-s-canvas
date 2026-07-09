@@ -38,6 +38,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("HX-Redirect", "/drawings")
 	w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2"></div>`))
 }
 
@@ -56,6 +57,7 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("HX-Redirect", "/")
 	w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` +
 		`<button onclick="signInWithGoogle()" class="` + navBtnClass + `">Sign In</button>` +
 		`</div>`))

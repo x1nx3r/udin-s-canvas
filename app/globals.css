@@ -6,8 +6,8 @@
 
 /* ─── Design Tokens (Catppuccin Brutalist) ─────────── */
 :root {
-  --bg:        #eff1f5;
-  --bg-subtle: #e6e9ef;
+  --bg:        #dce0e8;
+  --bg-subtle: #ccd0da;
   --fg:        #4c4f69;
   --fg-muted:  #6c6f85;
   --border:    #4c4f69;
@@ -27,7 +27,7 @@
 }
 
 .dark {
-  --bg:        #1e1e2e;
+  --bg:        #11111b;
   --bg-subtle: #181825;
   --fg:        #cdd6f4;
   --fg-muted:  #a6adc8;
@@ -64,15 +64,15 @@ body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   background-image: 
-    linear-gradient(to right, rgba(136, 57, 239, 0.06) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(30, 102, 245, 0.06) 1px, transparent 1px);
+    linear-gradient(to right, rgba(136, 57, 239, 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(30, 102, 245, 0.12) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
 .dark body {
   background-image: 
-    linear-gradient(to right, rgba(203, 166, 247, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(137, 180, 250, 0.04) 1px, transparent 1px);
+    linear-gradient(to right, rgba(203, 166, 247, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(137, 180, 250, 0.08) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
