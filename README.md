@@ -261,10 +261,9 @@ deploy takes about 30 seconds including the compression of old releases.
 
 ### Server Setup
 
-- **Server:** `103.93.163.44` (Ubuntu, bare-metal)
-- **Reverse proxy:** Caddy → `:3010` → localhost:3000
-- **Service:** `udin-canvas.service` with `MemoryMax=128M`
-- **Database:** `/var/www/udin-canvas/shared/canvas.db` (persists across deploys)
+- **Reverse proxy:** Caddy → app port
+- **Service:** systemd unit with memory limit
+- **Database:** shared SQLite file (persists across deploys via symlinks)
 - **Peak memory:** ~16MB
 
 ### Environment Variables
