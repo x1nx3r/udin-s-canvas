@@ -11,12 +11,19 @@ import (
 	"gotth/app/auth"
 	"gotth/app/canvas"
 	"gotth/app/dashboard"
+	"gotth/app/db"
 	"gotth/app/profile"
 	_ "github.com/a-h/templ"
 )
 
 func main() {
 	auth.Init()
+
+	dbPath := os.Getenv("SQLITE_DB_PATH")
+	if dbPath == "" {
+		dbPath = "./canvas.db"
+	}
+	db.Init(dbPath)
 
 	mux := http.NewServeMux()
 

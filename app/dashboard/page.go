@@ -1,13 +1,14 @@
 package dashboard
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"log"
 	"net/http"
-	"sort"
 	"time"
-	"gotth/app/auth"
 
-	"google.golang.org/api/iterator"
+	"gotth/app/auth"
+	"gotth/app/db"
 )
 
 type Drawing struct {
@@ -25,28 +26,24 @@ func PageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	iter := auth.Firestore.Collection("drawings").
-		Where("ownerId", "==", uid).
-		Documents(r.Context())
+	rows, err := db.DB.QueryContext(r.Context(),
+		"SELECT id, title, created_at, updated_at, thumbnail FROM drawings WHERE owner_id = ? ORDER BY updated_at DESC", uid)
+	if err != nil {
+		log.Printf("query drawings: %v", err)
+		http.Error(w, "failed to load drawings", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
 
 	var drawings []Drawing
-	for {
-		doc, err := iter.Next()
-		if err == iterator.Done {
-			break
+	for rows.Next() {
+		var d Drawing
+		if err := rows.Scan(&d.ID, &d.Title, &d.CreatedAt, &d.UpdatedAt, &d.Thumbnail); err != nil {
+			log.Printf("scan drawing: %v", err)
+			continue
 		}
-		if err != nil {
-			log.Printf("Firestore query: %v", err)
-			break
-		}
-		d := Drawing{ID: doc.Ref.ID}
-		doc.DataTo(&d)
 		drawings = append(drawings, d)
 	}
-
-	sort.Slice(drawings, func(i, j int) bool {
-		return drawings[i].UpdatedAt.After(drawings[j].UpdatedAt)
-	})
 
 	DashboardPage(drawings).Render(r.Context(), w)
 }
@@ -58,21 +55,19 @@ func NewHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ref := auth.Firestore.Collection("drawings").NewDoc()
-	now := time.Now()
+	b := make([]byte, 16)
+	rand.Read(b)
+	id := hex.EncodeToString(b)
 
-	_, err := ref.Set(r.Context(), map[string]interface{}{
-		"ownerId":   uid,
-		"title":     "Untitled",
-		"createdAt": now,
-		"updatedAt": now,
-		"sceneData": `{"elements":[],"appState":{}}`,
-	})
+	now := time.Now()
+	_, err := db.DB.ExecContext(r.Context(),
+		"INSERT INTO drawings (id, owner_id, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+		id, uid, "Untitled", `{"elements":[],"appState":{}}`, now, now)
 	if err != nil {
 		log.Printf("create drawing: %v", err)
 		http.Error(w, "failed to create drawing", http.StatusInternalServerError)
 		return
 	}
 
-	http.Redirect(w, r, "/draw/"+ref.ID, http.StatusFound)
+	http.Redirect(w, r, "/draw/"+id, http.StatusFound)
 }

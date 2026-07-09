@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"cloud.google.com/go/firestore"
 	"gotth/app/auth"
+	"gotth/app/db"
 )
 
 type sceneData struct {
@@ -16,45 +16,56 @@ type sceneData struct {
 	AppState json.RawMessage `json:"appState"`
 }
 
-func loadDrawing(r *http.Request, id string) (map[string]interface{}, bool) {
+func loadDrawing(r *http.Request, id string) (string, bool) {
 	uid := auth.GetUserUID(r.Context())
 	if uid == "" {
-		return nil, false
+		return "", false
 	}
 
-	doc, err := auth.Firestore.Collection("drawings").Doc(id).Get(r.Context())
+	var ownerId string
+	err := db.DB.QueryRowContext(r.Context(), "SELECT owner_id FROM drawings WHERE id = ?", id).Scan(&ownerId)
 	if err != nil {
-		return nil, false
+		return "", false
 	}
-
-	data := doc.Data()
-	ownerId, _ := data["ownerId"].(string)
 	if ownerId != uid {
-		return nil, false
+		return "", false
 	}
 
-	return data, true
+	return ownerId, true
 }
 
 func DataHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	data, ok := loadDrawing(r, id)
-	if !ok {
+	uid := auth.GetUserUID(r.Context())
+	if uid == "" {
 		http.NotFound(w, r)
 		return
 	}
 
-	sanitizedSceneData(w, data["sceneData"])
+	var ownerId, content string
+	err := db.DB.QueryRowContext(r.Context(), "SELECT owner_id, content FROM drawings WHERE id = ?", id).Scan(&ownerId, &content)
+	if err != nil || ownerId != uid {
+		http.NotFound(w, r)
+		return
+	}
+
+	sanitizedSceneData(w, content)
 }
 
 func SaveHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	data, ok := loadDrawing(r, id)
-	if !ok {
+	uid := auth.GetUserUID(r.Context())
+	if uid == "" {
 		http.NotFound(w, r)
 		return
 	}
-	_ = data
+
+	var ownerId string
+	err := db.DB.QueryRowContext(r.Context(), "SELECT owner_id FROM drawings WHERE id = ?", id).Scan(&ownerId)
+	if err != nil || ownerId != uid {
+		http.NotFound(w, r)
+		return
+	}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -68,10 +79,9 @@ func SaveHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = auth.Firestore.Collection("drawings").Doc(id).Set(r.Context(), map[string]interface{}{
-		"sceneData": string(body),
-		"updatedAt": time.Now(),
-	}, firestore.MergeAll)
+	_, err = db.DB.ExecContext(r.Context(),
+		"UPDATE drawings SET content = ?, updated_at = ? WHERE id = ?",
+		string(body), time.Now(), id)
 	if err != nil {
 		log.Printf("save drawing %s: %v", id, err)
 		http.Error(w, "save failed", http.StatusInternalServerError)

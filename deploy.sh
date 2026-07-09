@@ -9,7 +9,7 @@ RELEASE_DIR="$APP_ROOT/releases/$TIMESTAMP"
 echo "-> 1. Compiling CSS and Go binary locally..."
 make css
 make templ
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /tmp/udin-canvas .
+CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o /tmp/udin-canvas .
 
 echo "-> 2. Pushing the monolithic binary to the bare-metal server..."
 ssh "$SERVER" "mkdir -p $RELEASE_DIR"

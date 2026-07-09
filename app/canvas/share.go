@@ -7,15 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"cloud.google.com/go/firestore"
 	"gotth/app/auth"
+	"gotth/app/db"
 )
-
-type shareEntry struct {
-	Slug      string    `firestore:"slug"`
-	DrawingID string    `firestore:"drawingId"`
-	CreatedAt time.Time `firestore:"createdAt"`
-}
 
 func generateSlug() (string, error) {
 	b := make([]byte, 8)
@@ -29,19 +23,13 @@ func ShareHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	uid := auth.GetUserUID(r.Context())
 
-	doc, err := auth.Firestore.Collection("drawings").Doc(id).Get(r.Context())
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	data := doc.Data()
-	ownerId, _ := data["ownerId"].(string)
-	if ownerId != uid {
+	var ownerId, existingSlug string
+	err := db.DB.QueryRowContext(r.Context(), "SELECT owner_id, share_slug FROM drawings WHERE id = ?", id).Scan(&ownerId, &existingSlug)
+	if err != nil || ownerId != uid {
 		http.NotFound(w, r)
 		return
 	}
 
-	existingSlug, _ := data["shareSlug"].(string)
 	if existingSlug != "" {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"slug": existingSlug})
@@ -54,22 +42,11 @@ func ShareHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = auth.Firestore.Collection("shares").Doc(slug).Set(r.Context(), shareEntry{
-		Slug:      slug,
-		DrawingID: id,
-		CreatedAt: time.Now(),
-	})
+	_, err = db.DB.ExecContext(r.Context(),
+		"UPDATE drawings SET share_slug = ?, updated_at = ? WHERE id = ?",
+		slug, time.Now(), id)
 	if err != nil {
 		http.Error(w, "share creation failed", http.StatusInternalServerError)
-		return
-	}
-
-	_, err = auth.Firestore.Collection("drawings").Doc(id).Set(r.Context(), map[string]interface{}{
-		"shareSlug": slug,
-		"updatedAt": time.Now(),
-	}, firestore.MergeAll)
-	if err != nil {
-		http.Error(w, "share update failed", http.StatusInternalServerError)
 		return
 	}
 
@@ -80,31 +57,18 @@ func ShareHandler(w http.ResponseWriter, r *http.Request) {
 func SharedDataHandler(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 
-	shareSnap, err := auth.Firestore.Collection("shares").Doc(slug).Get(r.Context())
+	var content string
+	err := db.DB.QueryRowContext(r.Context(), "SELECT content FROM drawings WHERE share_slug = ?", slug).Scan(&content)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 
-	share := shareSnap.Data()
-	drawingID, _ := share["drawingId"].(string)
-	if drawingID == "" {
-		http.NotFound(w, r)
-		return
-	}
-
-	drawing, err := auth.Firestore.Collection("drawings").Doc(drawingID).Get(r.Context())
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	sanitizedSceneData(w, drawing.Data()["sceneData"])
+	sanitizedSceneData(w, content)
 }
 
-func sanitizedSceneData(w http.ResponseWriter, raw any) {
-	sceneStr, _ := raw.(string)
-	sanitized := sanitizeSceneJSON(sceneStr)
+func sanitizedSceneData(w http.ResponseWriter, raw string) {
+	sanitized := sanitizeSceneJSON(raw)
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(sanitized)
 }

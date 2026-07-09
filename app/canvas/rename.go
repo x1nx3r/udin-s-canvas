@@ -5,22 +5,17 @@ import (
 	"net/http"
 	"time"
 
-	"cloud.google.com/go/firestore"
 	"gotth/app/auth"
+	"gotth/app/db"
 )
 
 func RenameHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	uid := auth.GetUserUID(r.Context())
 
-	doc, err := auth.Firestore.Collection("drawings").Doc(id).Get(r.Context())
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	data := doc.Data()
-	ownerId, _ := data["ownerId"].(string)
-	if ownerId != uid {
+	var ownerId string
+	err := db.DB.QueryRowContext(r.Context(), "SELECT owner_id FROM drawings WHERE id = ?", id).Scan(&ownerId)
+	if err != nil || ownerId != uid {
 		http.NotFound(w, r)
 		return
 	}
@@ -33,10 +28,9 @@ func RenameHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = auth.Firestore.Collection("drawings").Doc(id).Set(r.Context(), map[string]interface{}{
-		"title":     body.Title,
-		"updatedAt": time.Now(),
-	}, firestore.MergeAll)
+	_, err = db.DB.ExecContext(r.Context(),
+		"UPDATE drawings SET title = ?, updated_at = ? WHERE id = ?",
+		body.Title, time.Now(), id)
 	if err != nil {
 		http.Error(w, "rename failed", http.StatusInternalServerError)
 		return

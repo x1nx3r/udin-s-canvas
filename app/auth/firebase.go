@@ -7,14 +7,10 @@ import (
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
-	"cloud.google.com/go/firestore"
 	"google.golang.org/api/option"
 )
 
-var (
-	FirebaseAuth *auth.Client
-	Firestore    *firestore.Client
-)
+var FirebaseAuth *auth.Client
 
 func Init() {
 	ctx := context.Background()
@@ -28,11 +24,6 @@ func Init() {
 	FirebaseAuth, err = app.Auth(ctx)
 	if err != nil {
 		log.Fatalf("app.Auth: %v", err)
-	}
-
-	Firestore, err = app.Firestore(ctx)
-	if err != nil {
-		log.Fatalf("app.Firestore: %v", err)
 	}
 
 	log.Println("Firebase Admin SDK initialized")

@@ -6,11 +6,18 @@ KEEP_RELEASES := 5
 
 .PHONY: deploy publish restart clean-old
 
-deploy: publish restart clean-old
+deploy: publish symlink-db restart clean-old
 
 publish:
 	@echo "-> Atomic shift: Pointing Caddy to new release..."
 	@ln -nfs $(RELEASE_DIR) $(CURRENT_DIR)
+
+symlink-db:
+	@echo "-> Symlinking shared SQLite database..."
+	@mkdir -p $(APP_ROOT)/shared
+	@ln -sf $(APP_ROOT)/shared/canvas.db $(CURRENT_DIR)/canvas.db
+	@ln -sf $(APP_ROOT)/shared/canvas.db-shm $(CURRENT_DIR)/canvas.db-shm
+	@ln -sf $(APP_ROOT)/shared/canvas.db-wal $(CURRENT_DIR)/canvas.db-wal
 
 restart:
 	@echo "-> Bouncing the systemd service..."

@@ -3,9 +3,10 @@ package profile
 import (
 	"log"
 	"net/http"
-	"sort"
 	"time"
+
 	"gotth/app/auth"
+	"gotth/app/db"
 )
 
 type DrawingItem struct {
@@ -36,25 +37,24 @@ func PageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	iter := auth.Firestore.Collection("drawings").Where("ownerId", "==", uid).Documents(r.Context())
-	docs, err := iter.GetAll()
+	rows, err := db.DB.QueryContext(r.Context(),
+		"SELECT id, title, updated_at, thumbnail FROM drawings WHERE owner_id = ? ORDER BY updated_at DESC", uid)
 	if err != nil {
 		log.Printf("list drawings: %v", err)
 		http.Error(w, "failed to load drawings", http.StatusInternalServerError)
 		return
 	}
+	defer rows.Close()
 
-	items := make([]DrawingItem, 0, len(docs))
-	for _, d := range docs {
-		data := d.Data()
-		t, _ := data["title"].(string)
-		ua, _ := data["updatedAt"].(time.Time)
-		th, _ := data["thumbnail"].(string)
-		items = append(items, DrawingItem{ID: d.Ref.ID, Title: t, UpdatedAt: ua, Thumbnail: th})
+	var items []DrawingItem
+	for rows.Next() {
+		var item DrawingItem
+		if err := rows.Scan(&item.ID, &item.Title, &item.UpdatedAt, &item.Thumbnail); err != nil {
+			log.Printf("scan drawing: %v", err)
+			continue
+		}
+		items = append(items, item)
 	}
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].UpdatedAt.After(items[j].UpdatedAt)
-	})
 
 	name := user.DisplayName
 	if name == "" {

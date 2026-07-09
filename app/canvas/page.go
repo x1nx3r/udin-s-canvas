@@ -3,7 +3,9 @@ package canvas
 import (
 	"log"
 	"net/http"
+
 	"gotth/app/auth"
+	"gotth/app/db"
 )
 
 func PageHandler(w http.ResponseWriter, r *http.Request) {
@@ -15,20 +17,18 @@ func PageHandler(w http.ResponseWriter, r *http.Request) {
 
 	id := r.PathValue("id")
 
-	doc, err := auth.Firestore.Collection("drawings").Doc(id).Get(r.Context())
+	var ownerId, title string
+	err := db.DB.QueryRowContext(r.Context(), "SELECT owner_id, title FROM drawings WHERE id = ?", id).Scan(&ownerId, &title)
 	if err != nil {
 		log.Printf("load drawing %s: %v", id, err)
 		http.NotFound(w, r)
 		return
 	}
 
-	ownerId, _ := doc.Data()["ownerId"].(string)
 	if ownerId != uid {
 		http.NotFound(w, r)
 		return
 	}
-
-	title, _ := doc.Data()["title"].(string)
 
 	CanvasPage(title, id).Render(r.Context(), w)
 }
