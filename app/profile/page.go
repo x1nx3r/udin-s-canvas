@@ -38,7 +38,7 @@ func PageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := db.DB.QueryContext(r.Context(),
-		"SELECT id, title, updated_at, thumbnail FROM drawings WHERE owner_id = ? ORDER BY updated_at DESC", uid)
+		"SELECT id, title, updated_at, COALESCE(thumbnail, '') FROM drawings WHERE owner_id = ? ORDER BY updated_at DESC", uid)
 	if err != nil {
 		log.Printf("list drawings: %v", err)
 		http.Error(w, "failed to load drawings", http.StatusInternalServerError)

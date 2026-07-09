@@ -20,3 +20,6 @@ app/assets/globals.css.output
 
 # Tools
 /k6
+
+# Build-time dependencies
+app/assets/excalidraw/node_modules/

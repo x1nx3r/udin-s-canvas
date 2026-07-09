@@ -2,6 +2,7 @@ package canvas
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -23,16 +24,17 @@ func ShareHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	uid := auth.GetUserUID(r.Context())
 
-	var ownerId, existingSlug string
+	var ownerId string
+	var existingSlug sql.NullString
 	err := db.DB.QueryRowContext(r.Context(), "SELECT owner_id, share_slug FROM drawings WHERE id = ?", id).Scan(&ownerId, &existingSlug)
 	if err != nil || ownerId != uid {
 		http.NotFound(w, r)
 		return
 	}
 
-	if existingSlug != "" {
+	if existingSlug.Valid && existingSlug.String != "" {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"slug": existingSlug})
+		json.NewEncoder(w).Encode(map[string]string{"slug": existingSlug.String})
 		return
 	}
 

@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"log"
 	"net/http"
@@ -27,7 +28,7 @@ func PageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := db.DB.QueryContext(r.Context(),
-		"SELECT id, title, created_at, updated_at, thumbnail FROM drawings WHERE owner_id = ? ORDER BY updated_at DESC", uid)
+		"SELECT id, title, created_at, updated_at, COALESCE(thumbnail, '') FROM drawings WHERE owner_id = ? ORDER BY updated_at DESC", uid)
 	if err != nil {
 		log.Printf("query drawings: %v", err)
 		http.Error(w, "failed to load drawings", http.StatusInternalServerError)
@@ -71,3 +72,11 @@ func NewHandler(w http.ResponseWriter, r *http.Request) {
 
 	http.Redirect(w, r, "/draw/"+id, http.StatusFound)
 }
+
+func drawingExists(id string) bool {
+	var exists int
+	db.DB.QueryRow("SELECT 1 FROM drawings WHERE id = ?", id).Scan(&exists)
+	return exists == 1
+}
+
+var _ = sql.ErrNoRows
