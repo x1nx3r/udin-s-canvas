@@ -35,7 +35,7 @@ templ DashboardPage(drawings []Drawing) {
 			</script>
 		</head>
 		<body hx-boost="true" hx-swap="innerHTML transition:true" class="min-h-full flex flex-col bg-[var(--bg)] text-[var(--fg)] antialiased">
-			@components.Navigation("/drawings")
+			@components.Navigation("/drawings", false)
 			<div class="flex flex-col flex-1">
 				<div class="mx-auto max-w-5xl px-6 py-16 lg:px-8 w-full">
 					<div class="flex items-center justify-between mb-12">

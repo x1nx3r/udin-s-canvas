@@ -44,22 +44,22 @@ func CanvasPage(title string, drawingId string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " — Udin's Canvas</title><link rel=\"icon\" type=\"image/svg+xml\" href=\"/static/logo.svg\"><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin=\"anonymous\"><link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;700&display=swap\" rel=\"stylesheet\"><link rel=\"stylesheet\" href=\"/globals.css\"><link rel=\"stylesheet\" href=\"/static/excalidraw.css\"><link rel=\"stylesheet\" href=\"/static/excalidraw-brutalist.css\"><script src=\"https://unpkg.com/htmx.org@2.0.4\" integrity=\"sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+\" crossorigin=\"anonymous\"></script><script>\n\t\t\t\t(function() {\n\t\t\t\t\tvar t = localStorage.getItem('theme');\n\t\t\t\t\tif (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {\n\t\t\t\t\t\tdocument.documentElement.classList.add('dark');\n\t\t\t\t\t}\n\t\t\t\t})();\n\t\t\t</script><style>\n\t\t\t\thtml, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }\n\t\t\t\t#canvas-mount { width: 100vw; height: calc(100vh - 40px); min-height: 200px; }\n\t\t\t\t#nav-hover { position: fixed; left: 0; right: 0; z-index: 50; top: -56px; transition: top 0.2s; }\n\t\t\t\t#nav-hover:hover { top: 0; }\n\t\t\t\t#nav-hover header { position: static; }\n\t\t\t</style></head><body class=\"h-full bg-[var(--bg)] text-[var(--fg)] antialiased\"><div id=\"nav-hover\"><div class=\"h-1 w-full\"></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " — Udin's Canvas</title><link rel=\"icon\" type=\"image/svg+xml\" href=\"/static/logo.svg\"><link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin=\"anonymous\"><link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;700&display=swap\" rel=\"stylesheet\"><link rel=\"stylesheet\" href=\"/globals.css\"><link rel=\"stylesheet\" href=\"/static/excalidraw.css\"><link rel=\"stylesheet\" href=\"/static/excalidraw-brutalist.css\"><script src=\"https://unpkg.com/htmx.org@2.0.4\" integrity=\"sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+\" crossorigin=\"anonymous\"></script><script>\n\t\t\t\t(function() {\n\t\t\t\t\tvar t = localStorage.getItem('theme');\n\t\t\t\t\tif (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {\n\t\t\t\t\t\tdocument.documentElement.classList.add('dark');\n\t\t\t\t\t}\n\t\t\t\t})();\n\t\t\t</script><style>\n\t\t\t\thtml, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }\n\t\t\t\t#canvas-mount { width: 100vw; height: calc(100vh - 40px); min-height: 200px; }\n\t\t\t</style></head><body class=\"h-full bg-[var(--bg)] text-[var(--fg)] antialiased\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = components.Navigation("/draw/"+drawingId).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = components.Navigation("/draw/"+drawingId, true).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</div><div class=\"flex items-center gap-2 px-6 py-2 border-b border-[var(--border)]\" id=\"title-bar\"><input id=\"title-input\" type=\"text\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<div class=\"flex items-center gap-2 px-6 py-2 border-b border-[var(--border)]\" id=\"title-bar\"><input id=\"title-input\" type=\"text\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/canvas/page.templ`, Line: 42, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/canvas/page.templ`, Line: 36, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 		if templ_7745c5c3_Err != nil {
@@ -72,7 +72,7 @@ func CanvasPage(title string, drawingId string) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(drawingId)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/canvas/page.templ`, Line: 58, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/canvas/page.templ`, Line: 52, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 		if templ_7745c5c3_Err != nil {
@@ -85,7 +85,7 @@ func CanvasPage(title string, drawingId string) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/canvas/page.templ`, Line: 58, Col: 74}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `app/canvas/page.templ`, Line: 52, Col: 74}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 		if templ_7745c5c3_Err != nil {

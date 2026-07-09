@@ -48,7 +48,7 @@ templ Layout(title string, currentPath string) {
 			</script>
 		</head>
 		<body hx-boost="true" hx-swap="innerHTML transition:true" class="min-h-full flex flex-col bg-[var(--bg)] text-[var(--fg)] antialiased">
-			@components.Navigation(currentPath)
+			@components.Navigation(currentPath, false)
 			<div class="flex flex-col flex-1">
 				{ children... }
 			</div>

@@ -28,16 +28,10 @@ templ CanvasPage(title string, drawingId string) {
 			<style>
 				html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
 				#canvas-mount { width: 100vw; height: calc(100vh - 40px); min-height: 200px; }
-				#nav-hover { position: fixed; left: 0; right: 0; z-index: 50; top: -56px; transition: top 0.2s; }
-				#nav-hover:hover { top: 0; }
-				#nav-hover header { position: static; }
 			</style>
 		</head>
 		<body class="h-full bg-[var(--bg)] text-[var(--fg)] antialiased">
-			<div id="nav-hover">
-				<div class="h-1 w-full"></div>
-				@components.Navigation("/draw/" + drawingId)
-			</div>
+			@components.Navigation("/draw/" + drawingId, true)
 			<div class="flex items-center gap-2 px-6 py-2 border-b border-[var(--border)]" id="title-bar">
 				<input id="title-input" type="text" value={ title } onchange="renameDrawing(this.value)"
 					class="flex-1 bg-transparent text-sm font-bold uppercase tracking-wider border-none outline-none text-[var(--fg)]"/>
