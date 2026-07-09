@@ -46,7 +46,7 @@ func DashboardPage(drawings []Drawing) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"mx-auto max-w-5xl px-6 py-16 lg:px-8 w-full\"><div class=\"flex items-center justify-between mb-12\"><div><h1 class=\"text-4xl font-black text-[var(--fg)] tracking-tight\">Your Drawings</h1><p class=\"mt-2 text-xs font-bold text-[var(--fg-muted)] uppercase tracking-wider\">Create, edit, and share your Excalidraw canvases.</p></div><form action=\"/draw/new\" method=\"POST\" hx-boost=\"false\"><button type=\"submit\" class=\"inline-flex h-10 items-center border-2 border-[var(--border)] bg-[var(--fg)] px-6 text-xs font-bold uppercase tracking-wider text-[var(--bg)] transition-all hover:bg-[var(--bg-subtle)] hover:text-[var(--fg)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[4px_4px_0px_0px_var(--border)]\">New Drawing</button></form></div><div id=\"drawing-list\" class=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"mx-auto max-w-5xl px-6 py-16 lg:px-8 w-full\"><div class=\"flex items-center justify-between mb-12\"><div><h1 class=\"text-4xl font-black text-[var(--fg)] tracking-tight\">Your Drawings</h1><p class=\"mt-2 text-xs font-bold text-[var(--fg-muted)] uppercase tracking-wider\">Create, edit, and share your Excalidraw canvases. No subscription required.</p></div><form action=\"/draw/new\" method=\"POST\" hx-boost=\"false\"><button type=\"submit\" class=\"inline-flex h-10 items-center border-2 border-[var(--border)] bg-[var(--fg)] px-6 text-xs font-bold uppercase tracking-wider text-[var(--bg)] transition-all hover:bg-[var(--bg-subtle)] hover:text-[var(--fg)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shadow-[4px_4px_0px_0px_var(--border)]\">New Drawing</button></form></div><div id=\"drawing-list\" class=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -69,7 +69,7 @@ func DashboardPage(drawings []Drawing) templ.Component {
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = app.Layout("Your Drawings — Udin's Canvas", "/drawings").Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = app.Layout("Your Drawings — Ingin Menjadi Programmer Handal Namun Enggan Subscribe Excalidraw", "/drawings").Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

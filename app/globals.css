@@ -4,34 +4,38 @@
 
 @source "./**/*.templ";
 
-/* ─── Design Tokens (Goth-Brutalist Latte / Mocha) ──── */
+/* ─── Design Tokens (Colorful Brutalist) ───────────── */
 :root {
-  --bg:        #e2e2e9; /* Stone Gray Base */
-  --bg-subtle: #d2d2db; /* Dusk Gray Mantle */
-  --fg:        #1a1a24; /* Deep Charcoal Text */
-  --fg-muted:  #4a4a58; /* Slate Gray Subtext */
-  --border:    #1a1a24; /* Deep Charcoal Borders */
-  --ring:      #991b1b; /* Crimson Red Highlight */
-  --accent:    #991b1b; /* Crimson Red Accent */
-  --accent-fg: #e2e2e9; /* Stone Gray Light */
-  --red:       #991b1b;
-  --green:     #14532d; /* Forest Emerald */
-  --yellow:    #78350f; /* Amber */
-  --radius:    0px;     /* Rigid Brutalist sharp corners */
+  --bg:        #ffffff;
+  --bg-subtle: #f0f0f0;
+  --fg:        #000000;
+  --fg-muted:  #555555;
+  --border:    #000000;
+  --ring:      #0066FF;
+  --accent:    #FF0054;
+  --accent-fg: #ffffff;
+  --red:       #FF0054;
+  --green:     #00CC66;
+  --yellow:    #FFB800;
+  --cyan:      #00CCFF;
+  --magenta:   #FF00FF;
+  --radius:    0px;
 }
 
 .dark {
-  --bg:        #0a0a0f; /* Pitch-black Void */
-  --bg-subtle: #12121a; /* Deep Obsidian Mantle */
-  --fg:        #f4f4f6; /* Bone White Text */
-  --fg-muted:  #9e9eb0; /* Ashen Gray Subtext */
-  --border:    #f4f4f6; /* Bone White Borders */
-  --ring:      #f43f5e; /* Blood Red Highlight */
-  --accent:    #c084fc; /* Ethereal Lavender Accent */
-  --accent-fg: #0a0a0f; /* Void Base */
-  --red:       #f43f5e;
-  --green:     #34d399;
-  --yellow:    #f9e2af;
+  --bg:        #0a0a0a;
+  --bg-subtle: #1a1a1a;
+  --fg:        #ffffff;
+  --fg-muted:  #888888;
+  --border:    #ffffff;
+  --ring:      #FF00FF;
+  --accent:    #00FFFF;
+  --accent-fg: #0a0a0a;
+  --red:       #FF3366;
+  --green:     #AAFF00;
+  --yellow:    #FFCC00;
+  --cyan:      #00FFFF;
+  --magenta:   #FF00FF;
 }
 
 /* ─── Base ───────────────────────────────────────── */
@@ -52,15 +56,16 @@ body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   background-image: 
-    linear-gradient(to right, rgba(76, 79, 105, 0.07) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(76, 79, 105, 0.07) 1px, transparent 1px);
+    linear-gradient(to right, rgba(255, 0, 84, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 102, 255, 0.08) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
 .dark body {
   background-image: 
-    linear-gradient(to right, rgba(244, 63, 94, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(244, 63, 94, 0.03) 1px, transparent 1px);
+    linear-gradient(to right, rgba(0, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 0, 255, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
 /* ─── Typography ─────────────────────────────────── */

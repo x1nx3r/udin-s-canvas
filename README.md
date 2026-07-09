@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="app/assets/public/logo.svg" width="96" height="96" alt="Udin's Canvas" style="border: 2px solid var(--border); padding: 8px;" />
+  <img src="app/assets/public/logo.svg" width="96" height="96" alt="IMPHISE" style="border: 2px solid var(--border); padding: 8px;" />
 </p>
 
-<h1 align="center">Udin's Canvas</h1>
+<h1 align="center">Ingin Menjadi Programmer Handal Namun Enggan Subscribe Excalidraw</h1>
 
 <p align="center">
   <strong>Live: <a href="https://canvas.x1nx3r.dev" target="_blank">canvas.x1nx3r.dev</a></strong>
@@ -13,7 +13,7 @@ for a SaaS product that emails me every Tuesday about "premium canvas
 textures." You know the ones. "Unlock the felt-tip pen for $9/mo." I just
 want to draw a box with an arrow in it. I don't need a subscription for that.
 
-This is **Udin's Canvas** — a Go + Templ + HTMX + Tailwind app that wraps
+This is **IMPHISE** — a Go + Templ + HTMX + Tailwind app that wraps
 Excalidraw, saves drawings to SQLite, and lets you share them with a link.
 No latency. No login wall (well, a Google login wall, but you already have
 a Google account). No "upgrade to pro to export as PNG."
@@ -309,7 +309,7 @@ everything I need. And it's backed up with a `cp` command.
 Excalidraw ships a minified CSS file that's about 145KB on one line. It
 gets embedded in the Go binary and served as a static file. There's also
 a brutalist override CSS that fixes the aesthetic clash between our sharp
-gothic theme and Excalidraw's rounded-corner default.
+colorful theme and Excalidraw's rounded-corner default.
 
 If Excalidraw updates their CSS classes between versions, the overrides
 will break. I've pinned the version to `0.18.1` to delay this as long as
@@ -319,11 +319,14 @@ very understanding.
 
 ## Design System
 
-"Goth-Brutalist" — sharp corners, hard offset shadows, dark palette.
+"Colorful Brutalist" — sharp corners, hard offset shadows, vibrant palette.
 
 - **Fonts:** Cinzel (headings), Inter (body), Fira Code (mono)
 - **Borders:** 2px solid, always
 - **Shadows:** Hard offset (`4px 4px 0px`), no blur
-- **Colors:** Dark backgrounds, crimson/lavender accents, high contrast
+- **Colors:** High-contrast primaries — electric pink, cyan, lime green, amber
 - **Buttons:** Translate on active (`translate-x-0.5 translate-y-0.5`), shadow disappears
 - **Radius:** Zero. Everywhere. No exceptions.
+- **Light mode:** White bg, black borders, neon accents
+- **Dark mode:** Near-black bg, white borders, cyan/magenta/lime accents
+- **Grid:** Subtle colored grid lines (pink/blue light, cyan/magenta dark)
