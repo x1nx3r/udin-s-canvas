@@ -10,6 +10,7 @@
 
 # OS
 .DS_Store
+canvas.db
 
 # Firebase credentials (DO NOT COMMIT)
 *-firebase-adminsdk-*.json
