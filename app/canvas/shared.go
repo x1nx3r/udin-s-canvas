@@ -3,6 +3,7 @@ package canvas
 import (
 	"net/http"
 
+	"gotth/app"
 	"gotth/app/lib"
 )
 
@@ -19,5 +20,8 @@ func SharedPageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	SharedPage(title, slug, allowPublicEdits == 1).Render(r.Context(), w)
+	meta := app.PageMeta{
+		Description: "View \"" + title + "\" — a shared Excalidraw drawing on IMPHISE.",
+	}
+	SharedPage(title, slug, allowPublicEdits == 1, meta).Render(r.Context(), w)
 }

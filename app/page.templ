@@ -26,7 +26,7 @@ templ iconCloud() {
 	</svg>
 }
 
-templ iconShare() {
+templ iconUsers() {
 	<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 		<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
 		<circle cx="9" cy="7" r="4"/>
@@ -35,14 +35,39 @@ templ iconShare() {
 	</svg>
 }
 
-templ iconMoon() {
+templ iconGit() {
 	<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-		<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+		<path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
 	</svg>
 }
 
 templ LandingPage() {
-	@Layout("Ingin Menjadi Programmer Handal Namun Enggan Subscribe Excalidraw", "/") {
+	@Layout("Ingin Menjadi Programmer Handal Namun Enggan Subscribe Excalidraw", "/", PageMeta{
+		Description: "Draw boxes. Connect them. Call it architecture. Free Excalidraw wrapper — real-time collaboration, autosave, one-click sharing, open source. No subscription. No premium canvas textures.",
+		Canonical: siteURL("/"),
+	}) {
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "WebApplication",
+				"name": "IMPHISE — Ingin Menjadi Programmer Handal Namun Enggan Subscribe Excalidraw",
+				"description": "Free Excalidraw wrapper with real-time collaboration, autosave, and one-click sharing. Open source (WTFPL).",
+				"url": "https://canvas.x1nx3r.dev/",
+				"applicationCategory": "Drawing",
+				"operatingSystem": "All",
+				"browserRequirements": "Requires JavaScript",
+				"offers": {
+					"@type": "Offer",
+					"price": "0",
+					"priceCurrency": "USD"
+				},
+				"author": {
+					"@type": "Person",
+					"name": "x1nx3r",
+					"url": "https://github.com/x1nx3r"
+				}
+			}
+		</script>
 		<!-- Hero -->
 		<section class="relative overflow-hidden">
 			<div class="pointer-events-none absolute inset-0 -z-10">
@@ -60,7 +85,10 @@ templ LandingPage() {
 						<span>Handal Namun Enggan</span><br/>
 						<span class="text-[var(--mauve)]">Subscribe Excalidraw</span>
 					</h1>
-					<p class="mt-4 sm:mt-6 text-sm sm:text-base font-bold uppercase tracking-wider text-[var(--fg-muted)]">
+					<p class="text-[10px] sm:text-xs italic font-bold tracking-wider text-[var(--peach)] mt-2 animate-pulse">
+						NOW WITH MULTIPLAYER!
+					</p>
+					<p class="mt-2 sm:mt-3 text-sm sm:text-base font-bold uppercase tracking-wider text-[var(--fg-muted)]">
 						Draw boxes. Connect them. Call it architecture.
 					</p>
 					<p class="mx-auto mt-3 sm:mt-4 max-w-xl text-xs sm:text-sm font-medium text-[var(--fg-muted)] leading-relaxed px-2">
@@ -97,9 +125,21 @@ templ LandingPage() {
 				</div>
 				<div class="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
 					@featureCard(iconCanvas(), "Draw Forever", "No canvas size limits. No 'your trial has expired.' Just an infinite canvas waiting for your stick figures.", "var(--accent)")
-					@featureCard(iconCloud(), "Autosave", "Every stroke saved to SQLite. Your masterpiece is safe even if your browser decides to update itself mid-doodle.", "var(--blue)")
-					@featureCard(iconShare(), "One-Click Share", "Generate a link. Send it. They view it. No account required. No 'request access and wait 3 business days.'", "var(--teal)")
-					@featureCard(iconMoon(), "Light & Dark", "Catppuccin Latte for the morning people. Mocha for the night owls. Toggle with one click. No premium theme store.", "var(--pink)")
+					@featureCard(iconCloud(), "Autosave & Share", "Every stroke saved to SQLite. One-click share link. Viewers need no account. Your masterpiece won't disappear when your laptop dies.", "var(--blue)")
+					@featureCard(iconUsers(), "Real-Time Collab", "Draw together. Lazy WebSocket upgrades on demand. Server crash? Reconnect. Resume. Zero data loss. No server-side state to lose.", "var(--teal)")
+					@featureCard(iconGit(), "Open Source", "WTFPL licensed. Clone it. Fork it. Host your own. The code is yours. No subscriptions, no hidden tiers, no 'enterprise' upsell.", "var(--pink)")
+				</div>
+				<div class="mt-8 sm:mt-10 text-center">
+					<a
+						href="https://github.com/x1nx3r/ingin-menjadi-programmer-handal-namun-enggan-subscribe-excalidraw"
+						target="_blank"
+						class="btn btn-ghost h-11 sm:h-12 px-6 sm:px-8 text-xs sm:text-sm"
+					>
+						View on GitHub
+						<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+							<path stroke-linecap="square" stroke-linejoin="miter" d="M5 12h14m-7-7l7 7-7 7"/>
+						</svg>
+					</a>
 				</div>
 			</div>
 		</section>
@@ -124,8 +164,8 @@ templ LandingPage() {
 					</div>
 					<div class="text-center">
 						<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center border-2 border-[var(--teal)] bg-[var(--teal)] text-[var(--accent-fg)] text-lg font-black shadow-[2px_2px_0px_0px_var(--teal)]">3</div>
-						<h3 class="text-sm font-black uppercase tracking-wider">Share</h3>
-						<p class="mt-2 text-xs font-medium text-[var(--fg-muted)]">One click. Link generated. Send it to whoever. No account needed.</p>
+						<h3 class="text-sm font-black uppercase tracking-wider">Share & Collab</h3>
+						<p class="mt-2 text-xs font-medium text-[var(--fg-muted)]">One click generates a link. Share it. Viewers watch live. Collaborators draw with you. No account needed.</p>
 					</div>
 				</div>
 			</div>
@@ -139,16 +179,46 @@ templ LandingPage() {
 					<p class="mt-2 text-2xl sm:text-3xl font-black uppercase tracking-tighter">GOTTH. No node_modules.</p>
 				</div>
 				<div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
-					<span class="badge border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--accent)] px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs">Go</span>
-					<span class="badge border-[var(--blue)] bg-[var(--blue)] text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--blue)] px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs">Templ</span>
-					<span class="badge border-[var(--teal)] bg-[var(--teal)] text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--teal)] px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs">HTMX</span>
-					<span class="badge border-[var(--pink)] bg-[var(--pink)] text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--pink)] px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs">Tailwind</span>
-					<span class="badge border-[var(--mauve)] bg-[var(--mauve)] text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--mauve)] px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs">SQLite</span>
-					<span class="badge border-[var(--lavender)] bg-[var(--lavender)] text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--lavender)] px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs">Excalidraw</span>
+					<a href="https://github.com/x1nx3r/ingin-menjadi-programmer-handal-namun-enggan-subscribe-excalidraw" target="_blank" class="badge border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--accent)] px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs no-underline hover:opacity-80">Go</a>
+					<a href="https://github.com/x1nx3r/ingin-menjadi-programmer-handal-namun-enggan-subscribe-excalidraw" target="_blank" class="badge border-[var(--blue)] bg-[var(--blue)] text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--blue)] px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs no-underline hover:opacity-80">Templ</a>
+					<a href="https://github.com/x1nx3r/ingin-menjadi-programmer-handal-namun-enggan-subscribe-excalidraw" target="_blank" class="badge border-[var(--teal)] bg-[var(--teal)] text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--teal)] px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs no-underline hover:opacity-80">HTMX</a>
+					<a href="https://github.com/x1nx3r/ingin-menjadi-programmer-handal-namun-enggan-subscribe-excalidraw" target="_blank" class="badge border-[var(--pink)] bg-[var(--pink)] text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--pink)] px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs no-underline hover:opacity-80">Tailwind</a>
+					<a href="https://github.com/x1nx3r/ingin-menjadi-programmer-handal-namun-enggan-subscribe-excalidraw" target="_blank" class="badge border-[var(--mauve)] bg-[var(--mauve)] text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--mauve)] px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs no-underline hover:opacity-80">SQLite</a>
+					<a href="https://github.com/x1nx3r/ingin-menjadi-programmer-handal-namun-enggan-subscribe-excalidraw" target="_blank" class="badge border-[var(--lavender)] bg-[var(--lavender)] text-[var(--accent-fg)] shadow-[2px_2px_0px_0px_var(--lavender)] px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs no-underline hover:opacity-80">Excalidraw</a>
 				</div>
 				<p class="mt-6 sm:mt-8 text-center text-[10px] sm:text-xs font-medium text-[var(--fg-muted)]">
 					Compiles to a single binary. Deploys with <code class="border-2 border-[var(--border)] bg-[var(--bg-subtle)] px-1.5 py-0.5 text-[var(--fg)] font-bold">scp</code>. Uses 16MB of RAM. That's less than your browser tabs.
 				</p>
+			</div>
+		</section>
+
+		<!-- Multiplayer Services -->
+		<section class="border-t-2 border-[var(--border)] bg-[var(--bg-subtle)]">
+			<div class="mx-auto max-w-3xl px-4 sm:px-6 py-16 sm:py-24 lg:px-8 text-center">
+				<h2 class="text-2xl sm:text-3xl font-black uppercase tracking-tighter">Need Multiplayer?</h2>
+				<p class="mt-4 text-sm sm:text-base font-bold uppercase tracking-wider text-[var(--fg-muted)] max-w-xl mx-auto">
+					Real-time collaboration for your team. Custom features. Self-hosted or managed.
+				</p>
+				<div class="mt-8 flex flex-col items-center gap-3">
+					<a
+						href="mailto:contact@x1nx3r.dev"
+						class="btn btn-primary h-12 sm:h-14 px-8 sm:px-10 text-sm sm:text-base shadow-[6px_6px_0px_0px_var(--accent)] hover:shadow-[8px_8px_0px_0px_var(--mauve)]"
+					>
+						contact@x1nx3r.dev
+						<svg class="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+							<path stroke-linecap="square" stroke-linejoin="miter" d="M5 12h14m-7-7l7 7-7 7"/>
+						</svg>
+					</a>
+					<p class="text-xs font-medium text-[var(--fg-muted)]">
+						Price? Let's discuss it based on your demands.
+					</p>
+					<p class="text-xs font-medium text-[var(--fg-muted)]">
+						Don't wanna pay?
+						<a href="https://github.com/x1nx3r/ingin-menjadi-programmer-handal-namun-enggan-subscribe-excalidraw" target="_blank" class="text-[var(--accent)] underline font-bold">
+							Clone the repo and host your own.
+						</a>
+					</p>
+				</div>
 			</div>
 		</section>
 

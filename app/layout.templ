@@ -5,7 +5,43 @@ import (
 	"gotth/app/components"
 )
 
-templ Layout(title string, currentPath string) {
+type PageMeta struct {
+	Description string
+	Canonical   string
+	Image       string
+	NoIndex     bool
+}
+
+func siteURL(path string) string {
+	return "https://canvas.x1nx3r.dev" + path
+}
+
+func seoDesc(meta []PageMeta) string {
+	if len(meta) > 0 && meta[0].Description != "" {
+		return meta[0].Description
+	}
+	return "Draw boxes. Connect them. Call it architecture. Free Excalidraw wrapper with GOTTH Stack — Go, Templ, HTMX, Tailwind, SQLite."
+}
+
+func seoImage(meta []PageMeta) string {
+	if len(meta) > 0 && meta[0].Image != "" {
+		return meta[0].Image
+	}
+	return siteURL("/static/logo.svg")
+}
+
+func seoCanonical(meta []PageMeta) string {
+	if len(meta) > 0 && meta[0].Canonical != "" {
+		return meta[0].Canonical
+	}
+	return ""
+}
+
+func seoNoIndex(meta []PageMeta) bool {
+	return len(meta) > 0 && meta[0].NoIndex
+}
+
+templ Layout(title string, currentPath string, meta ...PageMeta) {
 	<!DOCTYPE html>
 	<html lang="en" class="h-full">
 		<head>
@@ -19,7 +55,23 @@ templ Layout(title string, currentPath string) {
 			<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 			<meta name="apple-mobile-web-app-title" content="IMPHISE"/>
 			<link rel="apple-touch-icon" href="/static/logo.svg"/>
-			<meta name="description" content="Ingin Menjadi Programmer Handal Namun Enggan Subscribe Excalidraw — Excalidraw wrapper with GOTTH Stack."/>
+			<meta name="description" content={ seoDesc(meta) }/>
+			<meta property="og:type" content="website"/>
+			<meta property="og:site_name" content="IMPHISE"/>
+			<meta property="og:title" content={ title }/>
+			<meta property="og:description" content={ seoDesc(meta) }/>
+			<meta property="og:image" content={ seoImage(meta) }/>
+			if seoCanonical(meta) != "" {
+				<meta property="og:url" content={ seoCanonical(meta) }/>
+				<link rel="canonical" href={ seoCanonical(meta) }/>
+			}
+			<meta name="twitter:card" content="summary_large_image"/>
+			<meta name="twitter:title" content={ title }/>
+			<meta name="twitter:description" content={ seoDesc(meta) }/>
+			<meta name="twitter:image" content={ seoImage(meta) }/>
+			if seoNoIndex(meta) {
+				<meta name="robots" content="noindex, nofollow"/>
+			}
 			<link rel="preconnect" href="https://fonts.googleapis.com"/>
 			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
 			<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>

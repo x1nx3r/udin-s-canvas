@@ -2,7 +2,7 @@ package app
 
 import "gotth/app/assets"
 
-templ CanvasLayout(title string) {
+templ CanvasLayout(title string, meta ...PageMeta) {
 	<!DOCTYPE html>
 	<html lang="en" class="h-full">
 		<head>
@@ -16,6 +16,23 @@ templ CanvasLayout(title string) {
 			<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 			<meta name="apple-mobile-web-app-title" content="IMPHISE"/>
 			<link rel="apple-touch-icon" href="/static/logo.svg"/>
+			<meta name="description" content={ seoDesc(meta) }/>
+			<meta property="og:type" content="website"/>
+			<meta property="og:site_name" content="IMPHISE"/>
+			<meta property="og:title" content={ title }/>
+			<meta property="og:description" content={ seoDesc(meta) }/>
+			<meta property="og:image" content={ seoImage(meta) }/>
+			if seoCanonical(meta) != "" {
+				<meta property="og:url" content={ seoCanonical(meta) }/>
+				<link rel="canonical" href={ seoCanonical(meta) }/>
+			}
+			<meta name="twitter:card" content="summary_large_image"/>
+			<meta name="twitter:title" content={ title }/>
+			<meta name="twitter:description" content={ seoDesc(meta) }/>
+			<meta name="twitter:image" content={ seoImage(meta) }/>
+			if seoNoIndex(meta) {
+				<meta name="robots" content="noindex, nofollow"/>
+			}
 			<link rel="preconnect" href="https://fonts.googleapis.com"/>
 			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
 			<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>

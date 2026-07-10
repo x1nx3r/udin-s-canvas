@@ -39,3 +39,6 @@ app/assets/excalidraw/node_modules/
 profiles*/
 cookie.txt
 load_tests/
+app/assets/public/*.woff2
+app/assets/public/excalidraw.bundle.css
+app/assets/public/excalidraw.bundle.js

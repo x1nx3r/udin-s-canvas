@@ -81,9 +81,25 @@ func main() {
 	mux.HandleFunc("GET /api/shared/{slug}/ws", api.GuestWSHandler)
 	mux.HandleFunc("GET /api/ws/stats", api.WsStatsHandler) // plain-text hub diagnostic
 
+	// SEO: robots.txt
+	mux.HandleFunc("GET /robots.txt", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("User-agent: *\nAllow: /$\nAllow: /shared/\nDisallow: /admin/\nDisallow: /api/\nDisallow: /auth/\nDisallow: /draw/\nDisallow: /drawings\nDisallow: /profile\nSitemap: https://canvas.x1nx3r.dev/sitemap.xml\n"))
+	})
+
+	// SEO: sitemap.xml
+	mux.HandleFunc("GET /sitemap.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://canvas.x1nx3r.dev/</loc><priority>1.0</priority></url>
+</urlset>`))
+	})
+
 	// Super-admin panel (404 for everyone else)
 	adminMux := http.NewServeMux()
 	adminMux.HandleFunc("GET /admin", admin.PageHandler)
+	adminMux.HandleFunc("GET /admin/", admin.PageHandler)
 	adminMux.HandleFunc("GET /admin/users", admin.PageHandler)
 	adminMux.HandleFunc("GET /admin/users/{uid}", admin.PageHandler)
 	adminMux.HandleFunc("GET /admin/drawings", admin.PageHandler)

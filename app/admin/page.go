@@ -21,7 +21,7 @@ func PageHandler(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
 	switch path {
-	case "/admin":
+	case "/admin", "/admin/":
 		dashboardHandler(w, r)
 	case "/admin/users":
 		usersHandler(w, r)
@@ -31,6 +31,8 @@ func PageHandler(w http.ResponseWriter, r *http.Request) {
 		hubHandler(w, r)
 	case "/admin/system":
 		systemHandler(w, r)
+	case "/admin/vip":
+		vipHandler(w, r)
 	default:
 		// Check /admin/users/{uid}
 		if len(path) > 13 && path[:13] == "/admin/users/" {
@@ -227,6 +229,27 @@ func formatUptime() string {
 }
 
 var startTime = time.Now()
+
+func vipHandler(w http.ResponseWriter, r *http.Request) {
+	rows, err := lib.DB.QueryContext(r.Context(), `SELECT email, created_at FROM feature_whitelist ORDER BY created_at ASC`)
+	if err != nil {
+		log.Printf("list whitelist: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var entries []WhitelistEntry
+	for rows.Next() {
+		var e WhitelistEntry
+		if err := rows.Scan(&e.Email, &e.CreatedAt); err != nil {
+			continue
+		}
+		entries = append(entries, e)
+	}
+
+	VipPage(entries).Render(r.Context(), w)
+}
 
 // AddHandler adds an email to the VIP whitelist.
 func AddHandler(w http.ResponseWriter, r *http.Request) {
