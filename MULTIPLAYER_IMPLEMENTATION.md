@@ -2,26 +2,69 @@
 
 This document outlines the step-by-step phased execution plan to transform IMPHISE into a real-time collaborative whiteboard using the "Stateless Pipe" architecture.
 
+The collaboration feature is behind a **VIP whitelist** — only users on the whitelist can toggle "Live Collaboration" on a drawing. Access is managed via a hidden super-admin panel.
+
 ---
 
-## Phase 1: Database & UX Foundation
+## Phase 1: Database & UX Foundation ✅ DONE
 *Goal: Prepare the database and the UI to support opt-in collaboration.*
 
 1. **Schema Migration:**
-   - Execute an `ALTER TABLE drawings ADD COLUMN allow_public_edits BOOLEAN DEFAULT FALSE;`.
-   - Update the `Drawing` struct in `app/dashboard/page.go` to include this field.
+   - ✅ `ALTER TABLE drawings ADD COLUMN allow_public_edits INTEGER NOT NULL DEFAULT 0;`
+   - ✅ Update the `Drawing` struct in `app/dashboard/page.go` to include this field.
+   - ⬜ `CREATE TABLE feature_whitelist (email TEXT PRIMARY KEY, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`
 
 2. **Backend Handlers:**
-   - Add a new endpoint `PUT /api/draw/{id}/public-edit` that allows the owner to toggle `allow_public_edits` to `true` or `false`.
-   - Update `api.SharedDataHandler` to return the `allow_public_edits` boolean alongside the scene data.
+   - ✅ Add endpoint `PUT /api/draw/{id}/public-edit` that toggles `allow_public_edits`.
+   - ✅ Update `api.SharedDataHandler` to return the `allow_public_edits` boolean alongside the scene data.
 
-3. **Frontend UI (Dashboard/Canvas):**
-   - Add a "Live Collaboration: [Off/On]" toggle button inside the Share modal.
-   - Hook the toggle to send an HTMX `hx-put` request to the new endpoint.
+3. **Frontend UI (Share Dialog):**
+   - ✅ Add "Live Collaboration: [Off/On]" toggle button inside the Share modal.
+   - ✅ Toggle calls `PUT /api/draw/{id}/public-edit` via `fetch` and syncs state on dialog open.
 
 ---
 
-## Phase 2: The Go WebSocket Hub (The Stateless Pipe)
+## Phase 2: VIP Feature Flag & Super-Admin Panel
+*Goal: Gate the collaboration feature behind a SQLite whitelist, managed by a hidden admin panel.*
+
+1. **Schema Addition (`app/lib/db.go`):**
+   - Add idempotent migration for `feature_whitelist` table using `CREATE TABLE IF NOT EXISTS`.
+
+2. **Super-Admin Middleware (`app/lib/middleware.go`):**
+   - Create `RequireSuperAdmin(next http.Handler) http.Handler`.
+   - Extract the verified user from `r.Context()`.
+   - If user is nil or `user.Email != "monmega110@gmail.com"`, return `http.StatusNotFound` (404, not 403 — hide the existence of the route).
+   - If email matches, pass through to `next`.
+
+3. **Admin Handlers (`app/admin/`):**
+   - `GET /admin/vip` → Serves the admin panel page (fetches and renders current whitelist from SQLite).
+   - `POST /admin/vip/add` → `INSERT OR IGNORE INTO feature_whitelist (email) VALUES (?)`. Returns updated HTML list item fragment for HTMX `beforeend` swap.
+   - `DELETE /admin/vip/remove` → `DELETE FROM feature_whitelist WHERE email = ?`. Returns `200 OK`; HTMX removes the element via `outerHTML` swap.
+
+4. **Admin UI (`app/admin/admin.templ`):**
+   - Minimal, brutalist shell — no ceremony, no extra CSS.
+   - Add-user form: `<form hx-post="/admin/vip/add" hx-target="#vip-list" hx-swap="beforeend">` with `<input type="email" name="email">`.
+   - Whitelist: `<ul id="vip-list">` iterating over current emails.
+   - Each entry: `<button hx-delete="/admin/vip/remove?email={email}" hx-target="closest li" hx-swap="outerHTML">Revoke</button>`.
+
+5. **Route Registration (`main.go`):**
+   - Register all `/admin/*` routes wrapped in `RequireSuperAdmin`.
+
+6. **API Gatekeeper (`app/api/draw.go`):**
+   - In `PublicEditHandler`, before executing the `UPDATE`, query `feature_whitelist` using the current user's email.
+   - If not on the whitelist → `http.StatusForbidden` (403).
+   - If on whitelist → proceed with the `UPDATE`.
+
+7. **Canvas Page VIP Check (`app/canvas/page.go` & `page.templ`):**
+   - In `canvas.PageHandler`, query `feature_whitelist` for the current user's email.
+   - Pass `IsVIP bool` down to the `CanvasPage` templ component.
+   - In the Share Modal:
+     - `IsVIP == true` → render the functional toggle: `"Live Collaboration: [Off/On]"`.
+     - `IsVIP == false` → render a disabled hint: `"Live Collaboration: (Locked — Invite Only)"`.
+
+---
+
+## Phase 3: The Go WebSocket Hub (The Stateless Pipe)
 *Goal: Build the bare-metal, zero-state routing engine in Go.*
 
 1. **Hub Data Structures (`app/api/hub.go`):**
@@ -31,7 +74,7 @@ This document outlines the step-by-step phased execution plan to transform IMPHI
 2. **The WebSocket Upgrader (`app/api/ws.go`):**
    - Implement `GET /api/draw/{id}/ws` for authenticated owners.
    - Implement `GET /api/shared/{slug}/ws` for anonymous guests.
-   - Both endpoints upgrade the HTTP connection via `gorilla/websocket` (or `x/net/websocket`).
+   - Both endpoints upgrade the HTTP connection via `gorilla/websocket`.
 
 3. **The Broadcast Loop:**
    - Write a `readLoop` goroutine for each connection.
@@ -40,11 +83,11 @@ This document outlines the step-by-step phased execution plan to transform IMPHI
 
 4. **Connection Security & Lifecycles (The OOM & Leak Guards):**
    - **The Malicious Payload OOM Fix:** Immediately enforce `conn.SetReadLimit(1024 * 512)` (512 KB). This prevents a malicious user from sending a 50MB string over the socket and instantly triggering the systemd OOM killer.
-   - **The Laptop-Lid Memory Leak Fix:** Implement a Ping/Pong heartbeat loop. Set `conn.SetReadDeadline(time.Now().Add(60 * time.Second))`. The server must ping clients every 30 seconds; if a client drops offline silently (e.g. laptop lid closed), the read deadline trips, the loop safely panics, and the dead connection is purged from the Hub's RAM.
+   - **The Laptop-Lid Memory Leak Fix:** Implement a Ping/Pong heartbeat loop. Set `conn.SetReadDeadline(time.Now().Add(60 * time.Second))`. The server must ping clients every 30 seconds; if a client drops offline silently (e.g. laptop lid closed), the read deadline trips, the loop safely exits, and the dead connection is purged from the Hub's RAM.
 
 ---
 
-## Phase 3: The Passive Client (Live Presentation)
+## Phase 4: The Passive Client (Live Presentation)
 *Goal: Enable read-only clients to passively receive updates in real-time.*
 
 1. **WebSocket Initialization (`shared.templ` & `canvas.templ`):**
@@ -61,7 +104,7 @@ This document outlines the step-by-step phased execution plan to transform IMPHI
 
 ---
 
-## Phase 4: The Active Client (Live Collaboration)
+## Phase 5: The Active Client (Live Collaboration)
 *Goal: Safely broadcast local changes without causing infinite feedback loops or breaking the dirty-bit autosave.*
 
 1. **Mounting the Editor:**
@@ -78,13 +121,13 @@ This document outlines the step-by-step phased execution plan to transform IMPHI
 
 4. **Multiplayer Presence & Identity (Live Cursors):**
    - **The UX (Name Prompt):** When a guest visits the shared link, intercept them with a minimal, brutalist modal asking for their name before mounting the canvas. Store this in `sessionStorage`.
-   - **Client Identity:** Generate a random UUID for the current browser session. 
+   - **Client Identity:** Generate a random UUID for the current browser session.
    - **Broadcasting:** In `onPointerUpdate`, capture `pointer: { x, y }` and broadcast a `{ type: "pointer", clientId, username, pointer }` payload via the WebSocket.
    - **Rendering:** On the receiving end, use the incoming `clientId` as the key to inject the data into Excalidraw's native state: `api.updateScene({ collaborators: new Map([[payload.clientId, { pointer: payload.pointer, username: payload.username }]]) })`. This renders their cursor with their chosen name gracefully floating next to it.
 
 ---
 
-## Phase 5: Hardening & Load Testing
+## Phase 6: Hardening & Load Testing
 *Goal: Prove the architecture holds under pressure.*
 
 1. **Thundering Herd Simulation:**
