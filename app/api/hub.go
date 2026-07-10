@@ -1,12 +1,15 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"gotth/app/lib"
 )
 
 type Client struct {
@@ -14,31 +17,56 @@ type Client struct {
 	Send chan []byte
 }
 
-// Room holds all active WebSocket clients for a single drawing session.
 type Room struct {
-	mu        sync.Mutex
-	clients   map[*Client]bool
-	key       string
-	createdAt time.Time
-	msgCount  int64
+	mu           sync.Mutex
+	clients      map[*Client]bool
+	key          string
+	drawingID    string
+	createdAt    time.Time
+	msgCount     int64
+	lastElements []json.RawMessage
 }
 
 func newRoom(key string) *Room {
+	drawingID := ""
+	if len(key) > 5 && key[:5] == "draw:" {
+		drawingID = key[5:]
+	}
 	r := &Room{
 		clients:   make(map[*Client]bool),
 		key:       key,
+		drawingID: drawingID,
 		createdAt: time.Now(),
 	}
-	log.Printf("[hub] room OPEN  key=%s", key)
+	r.loadFromDB()
 	return r
+}
+
+func (r *Room) loadFromDB() {
+	if r.drawingID == "" {
+		return
+	}
+	var content string
+	err := lib.DB.QueryRow("SELECT content FROM drawings WHERE id = ?", r.drawingID).Scan(&content)
+	if err != nil || content == "" {
+		return
+	}
+	var parsed struct {
+		Elements []json.RawMessage `json:"elements"`
+	}
+	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
+		log.Printf("[hub] loadFromDB parse error for %s: %v", r.drawingID, err)
+		return
+	}
+	if parsed.Elements != nil {
+		r.lastElements = parsed.Elements
+	}
 }
 
 func (r *Room) add(client *Client) {
 	r.mu.Lock()
 	r.clients[client] = true
-	n := len(r.clients)
 	r.mu.Unlock()
-	log.Printf("[hub] conn  JOIN  key=%s peers=%d remote=%s", r.key, n, client.Conn.RemoteAddr())
 }
 
 func (r *Room) remove(client *Client) {
@@ -47,41 +75,80 @@ func (r *Room) remove(client *Client) {
 		delete(r.clients, client)
 		close(client.Send)
 	}
-	n := len(r.clients)
 	r.mu.Unlock()
-	log.Printf("[hub] conn  LEFT  key=%s peers=%d remote=%s", r.key, n, client.Conn.RemoteAddr())
 }
 
-// broadcast queues msg to every client in the room except the sender.
-// Slow clients whose channels are full will be disconnected to prevent blocking.
-func (r *Room) broadcast(sender *Client, msg []byte) {
+func (r *Room) sendSceneInit(client *Client) {
+	r.mu.Lock()
+	elements := r.lastElements
+	r.mu.Unlock()
+	msg, _ := json.Marshal(map[string]any{
+		"type": "SCENE_INIT",
+		"payload": map[string]any{
+			"elements": elements,
+		},
+	})
+	select {
+	case client.Send <- msg:
+	default:
+		log.Printf("[hub] sendSceneInit DROP key=%s remote=%s buffer full", r.key, client.Conn.RemoteAddr())
+		r.mu.Lock()
+		close(client.Send)
+		delete(r.clients, client)
+		r.mu.Unlock()
+	}
+}
+
+func (r *Room) handleMessage(sender *Client, msg []byte) {
+	var incoming struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(msg, &incoming); err != nil {
+		log.Printf("[hub] bad msg from %s: %v", sender.Conn.RemoteAddr(), err)
+		return
+	}
+	switch incoming.Type {
+	case "SCENE_UPDATE":
+		var scene struct {
+			Payload struct {
+				Elements []json.RawMessage `json:"elements"`
+			} `json:"payload"`
+		}
+		if err := json.Unmarshal(msg, &scene); err != nil {
+			log.Printf("[hub] SCENE_UPDATE parse error: %v", err)
+			return
+		}
+		r.mu.Lock()
+		r.lastElements = scene.Payload.Elements
+		r.mu.Unlock()
+		r.broadcastAllBut(sender, msg)
+	case "MOUSE_LOCATION":
+		r.broadcastAllBut(sender, msg)
+	default:
+		r.broadcastAllBut(sender, msg)
+	}
+}
+
+func (r *Room) broadcastAllBut(sender *Client, msg []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
 	r.msgCount++
 	count := 0
-	skipped := 0
 	start := time.Now()
-
 	for client := range r.clients {
 		if client == sender {
-			skipped++
 			continue
 		}
 		select {
 		case client.Send <- msg:
 			count++
 		default:
-			// Client's send buffer is full; disconnect slow client.
-			log.Printf("[hub] bcast DROP  key=%s remote=%s buffer full", r.key, client.Conn.RemoteAddr())
+			log.Printf("[hub] bcast DROP key=%s remote=%s buffer full", r.key, client.Conn.RemoteAddr())
 			close(client.Send)
 			delete(r.clients, client)
 		}
 	}
-
-	total := time.Since(start)
-	log.Printf("[hub] bcast DONE  key=%s msg#=%d bytes=%d sent=%d skip=%d total=%s",
-		r.key, r.msgCount, len(msg), count, skipped, total)
+	_ = start
 }
 
 func (r *Room) snapshot() (int, int64, time.Duration) {
@@ -96,7 +163,6 @@ func (r *Room) empty() bool {
 	return len(r.clients) == 0
 }
 
-// hub is the global registry of active rooms, keyed by "draw:"+drawingID.
 var hub = struct {
 	mu    sync.RWMutex
 	rooms map[string]*Room
@@ -119,12 +185,11 @@ func deleteRoomIfEmpty(key string) {
 	hub.mu.Lock()
 	defer hub.mu.Unlock()
 	if r, ok := hub.rooms[key]; ok && r.empty() {
-		log.Printf("[hub] room CLOSE key=%s msgs=%d age=%s", key, r.msgCount, time.Since(r.createdAt))
+		_ = r
 		delete(hub.rooms, key)
 	}
 }
 
-// HubStats returns a human-readable snapshot of all active rooms.
 func HubStats() string {
 	hub.mu.RLock()
 	defer hub.mu.RUnlock()

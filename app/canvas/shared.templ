@@ -113,50 +113,44 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 				}
 				var _username = sessionStorage.getItem('collab_username') || null;
 
-				var _networkLockTime = 0;
+				var _lastSceneVersion = -1;
+				var _sceneElements = [];
 
-				var _pendingBroadcast = null;
-				var _broadcastScheduled = false;
-				function scheduleBroadcast(elements) {
-					_pendingBroadcast = elements;
-					if (!_broadcastScheduled) {
-						_broadcastScheduled = true;
-						requestAnimationFrame(function() {
-							_broadcastScheduled = false;
-							if (_pendingBroadcast && _ws && _ws.readyState === WebSocket.OPEN && _username) {
-								_ws.send(JSON.stringify({ type: 'update', elements: _pendingBroadcast }));
-							}
-							_pendingBroadcast = null;
-						});
-					}
+				var _ws = null;
+				function handleRemoteScene(remoteElements) {
+					if (!_api) return;
+					var appState = _api.getAppState();
+					var existing = _sceneElements.length > 0 ? _sceneElements : _api.getSceneElements();
+					var Bundle = window.ExcalidrawBundle;
+					var restored = Bundle.restoreElements(remoteElements, existing);
+					var reconciled = Bundle.reconcileElements(existing, restored, appState);
+					reconciled = Bundle.bumpElementVersions(reconciled, existing);
+					_lastSceneVersion = Bundle.getSceneVersion(reconciled);
+					_api.updateScene({ elements: reconciled, captureUpdate: Bundle.CaptureUpdateAction.NEVER });
 				}
 
-				// WebSocket with randomized backoff reconnect (thundering herd protection).
-				var _ws = null;
 				function connectWS() {
 					var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
 					_ws = new WebSocket(proto + '//' + location.host + '/api/shared/' + slug + '/ws');
 					_ws.onmessage = function(event) {
 						try {
 							var payload = JSON.parse(event.data);
-							if (payload.type === 'update' && _api && payload.elements) {
-								_networkLockTime = Date.now();
-								_api.updateScene({ elements: payload.elements });
-							} else if (payload.type === 'pointer' && payload.clientId && payload.clientId !== _clientId) {
-								_collaborators.set(payload.clientId, {
-									pointer: payload.pointer,
-									username: payload.username || 'Guest'
+							if (payload.type === 'SCENE_INIT' || payload.type === 'SCENE_UPDATE') {
+								handleRemoteScene(payload.payload.elements || []);
+							} else if (payload.type === 'MOUSE_LOCATION' && payload.payload && payload.payload.clientId && payload.payload.clientId !== _clientId && _api) {
+								_collaborators.set(payload.payload.clientId, {
+									pointer: payload.payload.pointer,
+									username: payload.payload.username || 'Guest'
 								});
-								if (_api) { _api.updateScene({ collaborators: new Map(_collaborators) }); }
+								_api.updateScene({ collaborators: new Map(_collaborators) });
 							}
-						} catch(e) {}
+						} catch(e) { console.error('[ws] onmessage error:', e); }
 					};
 					_ws.onclose = function() {
 						setTimeout(connectWS, 1000 + Math.random() * 2000);
 					};
 					_ws.onerror = function() { _ws.close(); };
 				}
-				connectWS();
 
 				// --- Name Prompt (active mode only) ---
 				window.joinSession = function() {
@@ -188,6 +182,9 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 				var ReactDOM = window.ExcalidrawBundle.ReactDOM;
 				var Excalidraw = window.ExcalidrawBundle.Excalidraw;
 
+				var Bundle = window.ExcalidrawBundle;
+				var getSceneVersion = Bundle.getSceneVersion;
+
 				var excalidrawProps = {
 					viewModeEnabled: !allowPublicEdits,
 					theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
@@ -198,29 +195,39 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 							.then(function(r) { return r.json(); })
 							.then(function(data) {
 								if (data && data.elements) {
+									_lastSceneVersion = getSceneVersion(data.elements);
 									_api.updateScene({ elements: data.elements, appState: data.appState });
 								}
+								connectWS();
 							})
-							.catch(function(e) { console.error('Load error:', e); });
+							.catch(function(e) {
+								console.error('Load error:', e);
+								connectWS();
+							});
 					}
 				};
 
 				if (allowPublicEdits) {
 					excalidrawProps.onChange = function(elements, appState) {
-						if (Date.now() - _networkLockTime < 250) {
-							return; // Network echo — drop silently
+						_sceneElements = elements;
+						var version = getSceneVersion(elements);
+						if (version > _lastSceneVersion) {
+							_lastSceneVersion = version;
+							if (_ws && _ws.readyState === WebSocket.OPEN && _username) {
+								_ws.send(JSON.stringify({ type: 'SCENE_UPDATE', payload: { elements: elements } }));
+							}
 						}
-						
-						scheduleBroadcast(elements);
 					};
 
 					excalidrawProps.onPointerUpdate = function(payload) {
 						if (_ws && _ws.readyState === WebSocket.OPEN && _username && payload.pointer) {
 							_ws.send(JSON.stringify({
-								type: 'pointer',
-								clientId: _clientId,
-								username: _username,
-								pointer: payload.pointer
+								type: 'MOUSE_LOCATION',
+								payload: {
+									clientId: _clientId,
+									username: _username,
+									pointer: payload.pointer
+								}
 							}));
 						}
 					};

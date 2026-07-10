@@ -127,99 +127,104 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 				(function() {
 					var id = document.getElementById('canvas-mount').dataset.drawingId;
 					var mount = document.getElementById('canvas-mount');
-					var _dirty = false;
-					var _scene = null;
-					var _collaborators = new Map();
+				var _dirty = false;
+				var _scene = null;
+				var _collaborators = new Map();
+				var _lastSceneVersion = -1;
+				var _sceneElements = [];
 
-					var _networkLockTime = 0;
+				var _ws = null;
+				function handleRemoteScene(remoteElements) {
+					if (!window.excalidrawAPI) return;
+					var api = window.excalidrawAPI;
+					var appState = api.getAppState();
+					var existing = _sceneElements.length > 0 ? _sceneElements : api.getSceneElements();
+					var Bundle = window.ExcalidrawBundle;
+					var restored = Bundle.restoreElements(remoteElements, existing);
+					var reconciled = Bundle.reconcileElements(existing, restored, appState);
+					reconciled = Bundle.bumpElementVersions(reconciled, existing);
+					_lastSceneVersion = Bundle.getSceneVersion(reconciled);
+					api.updateScene({ elements: reconciled, captureUpdate: Bundle.CaptureUpdateAction.NEVER });
+				}
 
-					var _pendingBroadcast = null;
-					var _broadcastScheduled = false;
-					function scheduleBroadcast(elements) {
-						_pendingBroadcast = elements;
-						if (!_broadcastScheduled) {
-							_broadcastScheduled = true;
-							requestAnimationFrame(function() {
-								_broadcastScheduled = false;
-								if (_pendingBroadcast && _ws && _ws.readyState === WebSocket.OPEN) {
-									_ws.send(JSON.stringify({ type: 'update', elements: _pendingBroadcast }));
-								}
-								_pendingBroadcast = null;
-							});
-						}
-					}
-
-					// WebSocket — broadcaster (owner sends all local changes to the hub).
-					var _ws = null;
-					function connectWS() {
-						var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-						_ws = new WebSocket(proto + '//' + location.host + '/api/draw/' + id + '/ws');
-						_ws.onmessage = function(event) {
-							try {
-								var payload = JSON.parse(event.data);
-								if (payload.type === 'update' && payload.elements) {
-									_networkLockTime = Date.now();
-									window.excalidrawAPI.updateScene({ elements: payload.elements });
-								} else if (payload.type === 'pointer' && payload.clientId) {
-									_collaborators.set(payload.clientId, {
-										pointer: payload.pointer,
-										username: payload.username || 'Guest'
-									});
-									window.excalidrawAPI.updateScene({ collaborators: new Map(_collaborators) });
-								}
-							} catch(e) {}
-						};
-						_ws.onclose = function() {
-							setTimeout(connectWS, 1000 + Math.random() * 2000);
-						};
-						_ws.onerror = function() { _ws.close(); };
-					}
-					connectWS();
-
-					var React = window.ExcalidrawBundle.React;
-					var ReactDOM = window.ExcalidrawBundle.ReactDOM;
-					var Excalidraw = window.ExcalidrawBundle.Excalidraw;
-
-					var root = ReactDOM.createRoot(mount);
-					root.render(React.createElement(Excalidraw, {
-						excalidrawAPI: function(api) {
-							window.excalidrawAPI = api;
-							window.dispatchEvent(new Event('resize'));
-							fetch('/api/draw/' + id + '/data')
-								.then(function(r) { return r.json(); })
-								.then(function(data) {
-									if (data && data.elements) {
-										api.updateScene({ elements: data.elements, appState: data.appState });
-									}
-								})
-								.catch(function(e) { console.error('Load error:', e); });
-						},
-						onChange: function(elements, appState) {
-							_scene = { elements: elements, appState: appState };
-							_dirty = true;
-							
-							if (Date.now() - _networkLockTime < 250) {
-								return; // Network echo — drop silently
+				function connectWS() {
+					var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+					_ws = new WebSocket(proto + '//' + location.host + '/api/draw/' + id + '/ws');
+					_ws.onmessage = function(event) {
+						try {
+							var payload = JSON.parse(event.data);
+							if (payload.type === 'SCENE_INIT' || payload.type === 'SCENE_UPDATE') {
+								handleRemoteScene(payload.payload.elements || []);
+							} else if (payload.type === 'MOUSE_LOCATION' && payload.payload && payload.payload.clientId && window.excalidrawAPI) {
+								_collaborators.set(payload.payload.clientId, {
+									pointer: payload.payload.pointer,
+									username: payload.payload.username || 'Guest'
+								});
+								window.excalidrawAPI.updateScene({ collaborators: new Map(_collaborators) });
 							}
-							
-							scheduleBroadcast(elements);
-						},
-						onPointerUpdate: function(payload) {
+						} catch(e) { console.error('[ws] onmessage error:', e); }
+					};
+					_ws.onclose = function() {
+						setTimeout(connectWS, 1000 + Math.random() * 2000);
+					};
+					_ws.onerror = function() { _ws.close(); };
+				}
+
+				var Bundle = window.ExcalidrawBundle;
+				var React = Bundle.React;
+				var ReactDOM = Bundle.ReactDOM;
+				var Excalidraw = Bundle.Excalidraw;
+				var getSceneVersion = Bundle.getSceneVersion;
+
+				var root = ReactDOM.createRoot(mount);
+				root.render(React.createElement(Excalidraw, {
+					excalidrawAPI: function(api) {
+						window.excalidrawAPI = api;
+						window.dispatchEvent(new Event('resize'));
+						fetch('/api/draw/' + id + '/data')
+							.then(function(r) { return r.json(); })
+							.then(function(data) {
+								if (data && data.elements) {
+									_lastSceneVersion = getSceneVersion(data.elements);
+									api.updateScene({ elements: data.elements, appState: data.appState });
+								}
+								connectWS();
+							})
+							.catch(function(e) {
+								console.error('Load error:', e);
+								connectWS();
+							});
+					},
+					onChange: function(elements, appState) {
+						_sceneElements = elements;
+						_scene = { elements: elements, appState: appState };
+						_dirty = true;
+						var version = getSceneVersion(elements);
+						if (version > _lastSceneVersion) {
+							_lastSceneVersion = version;
 							if (_ws && _ws.readyState === WebSocket.OPEN) {
-								_ws.send(JSON.stringify({
-									type: 'pointer',
+								_ws.send(JSON.stringify({ type: 'SCENE_UPDATE', payload: { elements: elements } }));
+							}
+						}
+					},
+					onPointerUpdate: function(payload) {
+						if (_ws && _ws.readyState === WebSocket.OPEN && payload.pointer) {
+							_ws.send(JSON.stringify({
+								type: 'MOUSE_LOCATION',
+								payload: {
 									clientId: 'owner-' + id,
 									username: 'Owner',
 									pointer: payload.pointer
-								}));
-							}
-						},
-						theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
-						viewModeEnabled: false,
-						zenModeEnabled: false,
-						gridModeEnabled: false,
-						name: "IMPHISE"
-					}));
+								}
+							}));
+						}
+					},
+					theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+					viewModeEnabled: false,
+					zenModeEnabled: false,
+					gridModeEnabled: false,
+					name: "IMPHISE"
+				}));
 
 					var observer = new MutationObserver(function() {
 						if (window.excalidrawAPI) {

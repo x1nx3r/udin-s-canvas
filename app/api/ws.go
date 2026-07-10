@@ -50,7 +50,6 @@ func OwnerWSHandler(w http.ResponseWriter, r *http.Request) {
 	// Room key is always keyed by drawing ID so the owner and guests
 	// (who connect via slug) land in the same logical room.
 	roomKey := "draw:" + id
-	log.Printf("[ws]  OWNER  upgrade  room=%s remote=%s", roomKey, r.RemoteAddr)
 	serveWS(w, r, roomKey)
 }
 
@@ -73,19 +72,15 @@ func GuestWSHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	roomKey := "draw:" + drawingID
-	log.Printf("[ws]  GUEST  upgrade  room=%s slug=%s remote=%s", roomKey, slug, r.RemoteAddr)
 	serveWS(w, r, roomKey)
 }
 
 func serveWS(w http.ResponseWriter, r *http.Request, roomKey string) {
-	upgradeStart := time.Now()
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("[ws]  upgrade FAIL  room=%s remote=%s err=%v", roomKey, r.RemoteAddr, err)
 		return
 	}
-	log.Printf("[ws]  upgrade OK    room=%s remote=%s elapsed=%s",
-		roomKey, conn.RemoteAddr(), time.Since(upgradeStart))
 
 	client := &Client{
 		Conn: conn,
@@ -94,6 +89,9 @@ func serveWS(w http.ResponseWriter, r *http.Request, roomKey string) {
 
 	room := getOrCreateRoom(roomKey)
 	room.add(client)
+
+	// Send the current scene to the new client immediately on connect.
+	room.sendSceneInit(client)
 
 	// Start the write pump in a background goroutine.
 	go writePump(client, roomKey, room)
@@ -110,36 +108,25 @@ func readPump(client *Client, roomKey string, room *Room) {
 	client.Conn.SetReadDeadline(time.Now().Add(pongDeadline))
 	client.Conn.SetPongHandler(func(string) error {
 		client.Conn.SetReadDeadline(time.Now().Add(pongDeadline))
-		log.Printf("[ws]  pong   room=%s remote=%s", roomKey, client.Conn.RemoteAddr())
 		return nil
 	})
-
-	connectedAt := time.Now()
 
 	defer func() {
 		room.remove(client)
 		client.Conn.Close()
 		deleteRoomIfEmpty(roomKey)
-		log.Printf("[ws]  DISCONN room=%s remote=%s session=%s",
-			roomKey, client.Conn.RemoteAddr(), time.Since(connectedAt).Round(time.Millisecond))
 	}()
 
 	for {
-		readStart := time.Now()
 		_, msg, err := client.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("[ws]  read  ERR  room=%s remote=%s err=%v", roomKey, client.Conn.RemoteAddr(), err)
-			} else {
-				log.Printf("[ws]  read  CLOSE room=%s remote=%s reason=%v", roomKey, client.Conn.RemoteAddr(), err)
 			}
 			return
 		}
-		readElapsed := time.Since(readStart)
-		log.Printf("[ws]  read  MSG  room=%s remote=%s bytes=%d readWait=%s",
-			roomKey, client.Conn.RemoteAddr(), len(msg), readElapsed)
 
-		room.broadcast(client, msg)
+		room.handleMessage(client, msg)
 	}
 }
 
@@ -165,7 +152,6 @@ func writePump(client *Client, roomKey string, room *Room) {
 				return
 			}
 		case <-ticker.C:
-			log.Printf("[ws]  ping   room=%s remote=%s", roomKey, client.Conn.RemoteAddr())
 			client.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := client.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				log.Printf("[ws]  ping  FAIL room=%s remote=%s err=%v", roomKey, client.Conn.RemoteAddr(), err)
