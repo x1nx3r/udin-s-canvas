@@ -75,6 +75,10 @@ func main() {
 	mux.HandleFunc("GET /shared/{slug}", canvas.SharedPageHandler)
 	mux.HandleFunc("GET /api/shared/{slug}/data", api.SharedDataHandler)
 
+	// WebSocket routes
+	mux.Handle("GET /api/draw/{id}/ws", lib.RequireAuth(api.OwnerWSHandler))
+	mux.HandleFunc("GET /api/shared/{slug}/ws", api.GuestWSHandler)
+
 	// Super-admin panel (404 for everyone else)
 	adminMux := http.NewServeMux()
 	adminMux.HandleFunc("GET /admin/vip", admin.PageHandler)
