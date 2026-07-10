@@ -40,7 +40,9 @@ func OwnerWSHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	serveWS(w, r, id)
+	// Room key is always keyed by drawing ID so the owner and guests
+	// (who connect via slug) land in the same logical room.
+	serveWS(w, r, "draw:"+id)
 }
 
 // GuestWSHandler handles anonymous WebSocket connections from users with a share link.
@@ -49,10 +51,13 @@ func OwnerWSHandler(w http.ResponseWriter, r *http.Request) {
 func GuestWSHandler(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 
+	// Resolve the slug to the canonical drawing ID so guests and the owner
+	// share the same hub room (keyed by "draw:"+id).
+	var drawingID string
 	var allowPublicEdits int
 	err := lib.DB.QueryRowContext(r.Context(),
-		`SELECT allow_public_edits FROM drawings WHERE share_slug = ?`, slug,
-	).Scan(&allowPublicEdits)
+		`SELECT id, allow_public_edits FROM drawings WHERE share_slug = ?`, slug,
+	).Scan(&drawingID, &allowPublicEdits)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -63,7 +68,7 @@ func GuestWSHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serveWS(w, r, slug)
+	serveWS(w, r, "draw:"+drawingID)
 }
 
 // serveWS upgrades the connection, registers it in the hub, and starts the read loop.
@@ -88,20 +93,30 @@ func serveWS(w http.ResponseWriter, r *http.Request, roomKey string) {
 	room := getOrCreateRoom(roomKey)
 	room.add(conn)
 
+	// done is closed when the read loop exits, signalling the ping goroutine
+	// to terminate immediately rather than waiting up to pingInterval.
+	done := make(chan struct{})
+
 	// Ping goroutine: keep the connection alive and detect silent drops.
 	go func() {
 		ticker := time.NewTicker(pingInterval)
 		defer ticker.Stop()
-		for range ticker.C {
-			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+		for {
+			select {
+			case <-done:
 				return
+			case <-ticker.C:
+				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					return
+				}
 			}
 		}
 	}()
 
 	// Read loop: broadcast every incoming message to all other room members.
 	defer func() {
+		close(done) // signal ping goroutine to exit immediately
 		conn.Close()
 		room.remove(conn)
 		deleteRoomIfEmpty(roomKey)
