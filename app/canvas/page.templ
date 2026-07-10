@@ -109,7 +109,8 @@ templ CanvasPage(title string, drawingId string) {
 				(function() {
 					var id = document.getElementById('canvas-mount').dataset.drawingId;
 					var mount = document.getElementById('canvas-mount');
-					var saveTimer;
+					var _dirty = false;
+					var _scene = null;
 
 					var React = window.ExcalidrawBundle.React;
 					var ReactDOM = window.ExcalidrawBundle.ReactDOM;
@@ -130,15 +131,8 @@ templ CanvasPage(title string, drawingId string) {
 								.catch(function(e) { console.error('Load error:', e); });
 						},
 						onChange: function(elements, appState) {
-							window.latestElements = elements;
-							window.latestAppState = appState;
-							if (saveTimer) clearTimeout(saveTimer);
-							saveTimer = setTimeout(function() {
-								fetch('/api/draw/' + id + '/save', {
-									method: 'POST',
-									body: JSON.stringify({ elements: elements, appState: appState })
-								}).then(function() { generateThumbnail(elements, appState); }).catch(function(e) { console.error('Save error:', e); });
-							}, 2000);
+							_scene = { elements: elements, appState: appState };
+							_dirty = true;
 						},
 						theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
 						viewModeEnabled: false,
@@ -173,16 +167,33 @@ templ CanvasPage(title string, drawingId string) {
 							}).catch(function() {});
 					};
 
-					window.saveDrawing = function() {
-						if (saveTimer) clearTimeout(saveTimer);
-						var el = window.latestElements;
-						var st = window.latestAppState;
-						if (!el) return;
+					function flushIfDirty() {
+						if (!_dirty || !_scene) return;
+						_dirty = false;
+						var snapshot = _scene;
 						fetch('/api/draw/' + id + '/save', {
 							method: 'POST',
-							body: JSON.stringify({ elements: el, appState: st })
-						}).then(function() { generateThumbnail(el, st); }).catch(function(e) { console.error('Save error:', e); });
-					};
+							keepalive: true,
+							body: JSON.stringify(snapshot)
+						}).then(function() {
+							generateThumbnail(snapshot.elements, snapshot.appState);
+						}).catch(function(e) {
+							console.error('Save error:', e);
+							_dirty = true;
+						});
+					}
+
+					setInterval(flushIfDirty, 3000);
+
+					window.addEventListener('beforeunload', function() {
+						if (!_dirty || !_scene) return;
+						navigator.sendBeacon(
+							'/api/draw/' + id + '/save',
+							new Blob([JSON.stringify(_scene)], { type: 'application/json' })
+						);
+					});
+
+					window.saveDrawing = function() { flushIfDirty(); };
 
 					window.renameDrawing = function(newTitle) {
 						fetch('/api/draw/' + id + '/rename', {

@@ -3,6 +3,7 @@ package lib
 import (
 	"database/sql"
 	"log"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -23,6 +24,16 @@ func InitDB(dbPath string) {
 	DB.SetMaxOpenConns(1)
 
 	migrate()
+
+	// Periodically checkpoint the WAL so it doesn't balloon between restarts.
+	// PASSIVE mode never blocks readers or writers.
+	go func() {
+		for range time.Tick(5 * time.Minute) {
+			if _, err := DB.Exec("PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
+				log.Printf("wal_checkpoint: %v", err)
+			}
+		}
+	}()
 
 	log.Println("SQLite initialized:", dbPath)
 }
