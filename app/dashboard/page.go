@@ -58,12 +58,24 @@ func NewHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var count int
+	err := lib.DB.QueryRowContext(r.Context(), "SELECT COUNT(id) FROM drawings WHERE owner_id = ?", uid).Scan(&count)
+	if err != nil {
+		log.Printf("count drawings: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if count >= 30 {
+		http.Redirect(w, r, "/drawings", http.StatusFound)
+		return
+	}
+
 	b := make([]byte, 16)
 	rand.Read(b)
 	id := hex.EncodeToString(b)
 
 	now := time.Now()
-	_, err := lib.DB.ExecContext(r.Context(),
+	_, err = lib.DB.ExecContext(r.Context(),
 		"INSERT INTO drawings (id, owner_id, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
 		id, uid, "Untitled", `{"elements":[],"appState":{}}`, now, now)
 	if err != nil {

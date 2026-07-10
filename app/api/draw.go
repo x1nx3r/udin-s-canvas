@@ -60,9 +60,10 @@ func SaveHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 5*1024*1024) // 5 MB limit
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "payload too large", http.StatusRequestEntityTooLarge)
 		return
 	}
 
@@ -155,9 +156,10 @@ func ThumbnailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 256*1024) // 256 KB limit
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, "thumbnail too large", http.StatusRequestEntityTooLarge)
 		return
 	}
 

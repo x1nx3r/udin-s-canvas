@@ -14,12 +14,22 @@ templ DashboardPage(drawings []Drawing) {
 					<p class="mt-1 sm:mt-2 text-[10px] sm:text-xs font-bold text-[var(--fg-muted)] uppercase tracking-wider">Create, edit, and share your Excalidraw canvases. No subscription required.</p>
 				</div>
 				<form action="/draw/new" method="POST" hx-boost="false">
-					<button
-						type="submit"
-						class="btn btn-primary w-full sm:w-auto h-10 px-6 text-xs shadow-[4px_4px_0px_0px_var(--accent)] hover:shadow-[6px_6px_0px_0px_var(--mauve)]"
-					>
-						New Drawing
-					</button>
+					if len(drawings) >= 30 {
+						<button
+							type="button"
+							disabled
+							class="btn w-full sm:w-auto h-10 px-6 text-xs border-2 border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--fg-muted)] uppercase tracking-wider font-bold cursor-not-allowed"
+						>
+							Limit Reached (30/30)
+						</button>
+					} else {
+						<button
+							type="submit"
+							class="btn btn-primary w-full sm:w-auto h-10 px-6 text-xs shadow-[4px_4px_0px_0px_var(--accent)] hover:shadow-[6px_6px_0px_0px_var(--mauve)]"
+						>
+							New Drawing
+						</button>
+					}
 				</form>
 			</div>
 			<div id="drawing-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
