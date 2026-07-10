@@ -131,7 +131,17 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 					var _scene = null;
 					var _collaborators = new Map();
 
-					// Game Loop Architecture: Decouple networking from React's async onChange
+					// Physical DOM interaction tracking to filter out Excalidraw internal mutations
+					var _lastActivity = 0;
+					function markActive(e) {
+						if (e.type === 'pointermove' && e.buttons === 0) return;
+						_lastActivity = Date.now();
+					}
+					mount.addEventListener('pointerdown', markActive, true);
+					mount.addEventListener('pointermove', markActive, true);
+					mount.addEventListener('keydown', markActive, true);
+
+					// Game Loop Architecture
 					var _lastBroadcastHash = '';
 					var _lastNetworkHash = '';
 					var _networkLockTime = 0;
@@ -146,8 +156,6 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 					// Fixed 20fps tick for network syncing
 					setInterval(function() {
 						if (!window.excalidrawAPI || !_ws || _ws.readyState !== WebSocket.OPEN) return;
-						// Give React's async batched update 100ms to apply network patches
-						// before we sample the state again, avoiding stale read races.
 						if (Date.now() - _networkLockTime < 100) return;
 
 						var elements = window.excalidrawAPI.getSceneElements();
@@ -157,7 +165,14 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 							return; // No local changes
 						}
 
-						// Genuine local change (or normalized echo) — broadcast it
+						if (Date.now() - _lastActivity > 500) {
+							// State changed, but user hasn't touched the canvas in 500ms.
+							// This is Excalidraw normalizing a remote packet. Swallow the echo.
+							_lastNetworkHash = currentHash;
+							return;
+						}
+
+						// Genuine physical local change — broadcast it
 						_lastBroadcastHash = currentHash;
 						_ws.send(JSON.stringify({ type: 'update', elements: elements }));
 					}, 50);
