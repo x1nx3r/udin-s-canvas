@@ -175,6 +175,36 @@ func ThumbnailHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+func PublicEditHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !checkOwnership(r, id) {
+		http.NotFound(w, r)
+		return
+	}
+
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	val := 0
+	if body.Enabled {
+		val = 1
+	}
+	if _, err := lib.DB.ExecContext(r.Context(),
+		"UPDATE drawings SET allow_public_edits = ?, updated_at = ? WHERE id = ?",
+		val, time.Now(), id); err != nil {
+		http.Error(w, "update failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok"}`))
+}
+
 func DeleteHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !checkOwnership(r, id) {

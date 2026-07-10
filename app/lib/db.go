@@ -78,4 +78,14 @@ func migrate() {
 	if err != nil {
 		log.Fatalf("thumbnail migration: %v", err)
 	}
+
+	// Idempotent: add allow_public_edits column for multiplayer opt-in.
+	// SQLite does not support IF NOT EXISTS on ALTER TABLE, so we check manually.
+	var colCount int
+	_ = DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('drawings') WHERE name='allow_public_edits'`).Scan(&colCount)
+	if colCount == 0 {
+		if _, err = DB.Exec(`ALTER TABLE drawings ADD COLUMN allow_public_edits INTEGER NOT NULL DEFAULT 0`); err != nil {
+			log.Fatalf("migrate allow_public_edits: %v", err)
+		}
+	}
 }

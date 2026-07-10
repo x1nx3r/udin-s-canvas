@@ -90,6 +90,16 @@ templ CanvasPage(title string, drawingId string) {
 					<h2 class="text-sm font-bold uppercase tracking-wider mb-4">Share Drawing</h2>
 					<p class="text-xs text-[var(--fg-muted)] mb-3">Anyone with this link can view your drawing.</p>
 					<input id="share-link" type="text" readonly class="w-full border-2 border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2 text-xs font-mono mb-3" onclick="this.select()"/>
+					<div class="flex items-center justify-between border-2 border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2 mb-3">
+						<span class="text-xs font-bold uppercase tracking-wider">Live Collaboration</span>
+						<button
+							id="collab-toggle"
+							onclick="togglePublicEdit()"
+							class="btn btn-ghost px-3 py-1 text-[10px] uppercase tracking-wider"
+							data-enabled="false"
+						>Off</button>
+					</div>
+					<p class="text-[10px] text-[var(--fg-muted)] mb-3">When on, anyone with the link can draw on this canvas.</p>
 					<div class="flex gap-2 justify-end">
 						<button onclick="copyShareLink()" class="btn btn-ghost px-3 py-1.5 text-xs">Copy</button>
 						<button onclick="closeShare()" class="btn btn-ghost px-3 py-1.5 text-xs">Close</button>
@@ -224,6 +234,30 @@ templ CanvasPage(title string, drawingId string) {
 						document.getElementById('share-link').value = link;
 						document.getElementById('share-dialog').classList.remove('hidden');
 						document.getElementById('share-dialog').classList.add('flex');
+						// Sync the toggle state from the server
+						fetch('/api/shared/' + slug + '/data')
+							.then(function(r) { return r.json(); })
+							.then(function(data) { setCollabToggle(data.allowPublicEdits === true); })
+							.catch(function() {});
+					};
+
+					window.setCollabToggle = function(enabled) {
+						var btn = document.getElementById('collab-toggle');
+						btn.dataset.enabled = enabled ? 'true' : 'false';
+						btn.textContent = enabled ? 'On' : 'Off';
+						btn.style.color = enabled ? 'var(--accent)' : '';
+					};
+
+					window.togglePublicEdit = function() {
+						var btn = document.getElementById('collab-toggle');
+						var enabled = btn.dataset.enabled !== 'true';
+						fetch('/api/draw/' + id + '/public-edit', {
+							method: 'PUT',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ enabled: enabled })
+						}).then(function() {
+							setCollabToggle(enabled);
+						}).catch(function(e) { console.error('Toggle error:', e); });
 					};
 
 					window.closeShare = function() {
