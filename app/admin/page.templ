@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"strconv"
 	"time"
 )
 
@@ -9,56 +10,320 @@ type WhitelistEntry struct {
 	CreatedAt time.Time
 }
 
-templ AdminPage(entries []WhitelistEntry) {
+type DashboardStats struct {
+	TotalDrawings  int
+	TotalUsers     int
+	TotalWhitelist int
+	ActiveRooms    int
+	WSConnections  int
+	DBSize         string
+	Uptime         string
+}
+
+type UserEntry struct {
+	UID          string
+	Email        string
+	Name         string
+	CreatedAt    time.Time
+	LastSeen     time.Time
+	DrawingCount int
+	IsVIP        bool
+}
+
+type DrawingEntry struct {
+	ID         string
+	OwnerID    string
+	OwnerEmail string
+	Title      string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	HasShare   bool
+}
+
+type HubRoomEntry struct {
+	Key   string
+	Peers int
+	Msgs  int64
+	Age   string
+}
+
+templ AdminLayout(title string, currentPath string) {
 	<!DOCTYPE html>
-	<html lang="en">
+	<html lang="en" class="h-full">
 		<head>
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-			<title>VIP Admin — IMPHISE</title>
+			<title>{ title } — Admin — IMPHISE</title>
+			<link rel="icon" type="image/svg+xml" href="/static/logo.svg"/>
+			<link rel="preconnect" href="https://fonts.googleapis.com"/>
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
+			<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+			<link rel="stylesheet" href={ "/globals.css?v=" + getCSSHash() }/>
 			<script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
-			<style>
-				body { font-family: monospace; max-width: 640px; margin: 40px auto; padding: 0 16px; background: #1e1e2e; color: #cdd6f4; }
-				h1 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 2px solid #cdd6f4; padding-bottom: 8px; }
-				form { display: flex; gap: 8px; margin: 24px 0; }
-				input { flex: 1; background: #181825; border: 2px solid #cdd6f4; color: #cdd6f4; padding: 6px 10px; font-family: monospace; font-size: 0.875rem; }
-				button { background: transparent; border: 2px solid #cdd6f4; color: #cdd6f4; padding: 6px 12px; font-family: monospace; font-size: 0.875rem; cursor: pointer; text-transform: uppercase; }
-				button:hover { background: #cdd6f4; color: #1e1e2e; }
-				ul { list-style: none; padding: 0; margin: 0; }
-				li { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #313244; }
-				.email { font-size: 0.875rem; }
-				.meta { font-size: 0.75rem; color: #6c7086; }
-				.revoke { border-color: #f38ba8; color: #f38ba8; padding: 4px 8px; font-size: 0.75rem; }
-				.revoke:hover { background: #f38ba8; color: #1e1e2e; }
-				.empty { color: #6c7086; font-size: 0.875rem; margin: 16px 0; }
-			</style>
 		</head>
-		<body>
-			<h1>⚡ VIP Whitelist</h1>
-			<form hx-post="/admin/vip/add" hx-target="#vip-list" hx-swap="beforeend">
-				<input type="email" name="email" placeholder="user@example.com" required/>
-				<button type="submit">Add</button>
-			</form>
-			<ul id="vip-list">
-				if len(entries) == 0 {
-					<p class="empty">No VIPs yet.</p>
-				}
-				for _, e := range entries {
-					@WhitelistItem(e)
-				}
-			</ul>
+		<body hx-boost="true" hx-swap="innerHTML transition:true" class="min-h-full flex bg-[var(--bg)] text-[var(--fg)] antialiased">
+			@AdminSidebar(currentPath)
+			<main class="flex-1 min-w-0 p-6 lg:p-8 overflow-auto">
+				{ children... }
+			</main>
 		</body>
 	</html>
 }
 
-templ WhitelistItem(e WhitelistEntry) {
-	<li>
+templ AdminSidebar(currentPath string) {
+	<aside class="w-56 shrink-0 min-h-screen border-r-2 border-[var(--border)] bg-[var(--bg-subtle)] flex flex-col">
+		<div class="p-4 border-b-2 border-[var(--border)]">
+			<a href="/admin" class="font-bold font-heading text-sm tracking-wider uppercase text-[var(--accent)] no-underline hover:opacity-80">
+				IMPHISE Admin
+			</a>
+		</div>
+		<nav class="flex-1 p-3 flex flex-col gap-1">
+			@SidebarLink("/admin", currentPath, "Dashboard")
+			@SidebarLink("/admin/users", currentPath, "Users")
+			@SidebarLink("/admin/drawings", currentPath, "Drawings")
+			@SidebarLink("/admin/vip", currentPath, "VIP Whitelist")
+			@SidebarLink("/admin/hub", currentPath, "WebSocket Hub")
+			@SidebarLink("/admin/system", currentPath, "System")
+		</nav>
+		<div class="p-3 border-t-2 border-[var(--border)]">
+			<a href="/drawings" class="block text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)] no-underline hover:text-[var(--fg)]">
+				&larr; Back to App
+			</a>
+		</div>
+	</aside>
+}
+
+templ SidebarLink(href string, currentPath string, label string) {
+	<a
+		href={ templ.SafeURL(href) }
+		class={
+			"block px-3 py-2 border-2 text-xs font-bold uppercase tracking-wider transition-all",
+			templ.KV("bg-[var(--accent)] border-[var(--accent)] text-[var(--accent-fg)]", currentPath == href),
+			templ.KV("border-transparent text-[var(--fg)] hover:border-[var(--border)] hover:bg-[var(--bg)]", currentPath != href),
+		}
+	>
+		{ label }
+	</a>
+}
+
+templ StatCard(label string, value string) {
+	<div class="border-2 border-[var(--border)] bg-[var(--bg-subtle)] p-4">
+		<div class="text-2xl font-bold font-mono">{ value }</div>
+		<div class="text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)] mt-1">{ label }</div>
+	</div>
+}
+
+templ DashboardPage(stats DashboardStats) {
+	@AdminLayout("Dashboard", "/admin") {
+		<h1 class="text-lg font-bold font-heading uppercase tracking-wider mb-6">Dashboard</h1>
+		<div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+			@StatCard("Drawings", strconv.Itoa(stats.TotalDrawings))
+			@StatCard("Users", strconv.Itoa(stats.TotalUsers))
+			@StatCard("VIP Whitelist", strconv.Itoa(stats.TotalWhitelist))
+			@StatCard("Active Rooms", strconv.Itoa(stats.ActiveRooms))
+			@StatCard("WS Connections", strconv.Itoa(stats.WSConnections))
+			@StatCard("Database Size", stats.DBSize)
+			@StatCard("Uptime", stats.Uptime)
+		</div>
+	}
+}
+
+templ UsersPage(users []UserEntry) {
+	@AdminLayout("Users", "/admin/users") {
+		<h1 class="text-lg font-bold font-heading uppercase tracking-wider mb-6">Users</h1>
+		<div class="overflow-x-auto">
+			<table class="w-full text-left border-collapse">
+				<thead>
+					<tr class="border-b-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)]">
+						<th class="py-3 pr-4">Email</th>
+						<th class="py-3 pr-4">Name</th>
+						<th class="py-3 pr-4">UID</th>
+						<th class="py-3 pr-4">Drawings</th>
+						<th class="py-3 pr-4">VIP</th>
+						<th class="py-3 pr-4">Created</th>
+						<th class="py-3 pr-4">Last Seen</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, u := range users {
+						<tr class="border-b border-[var(--border)] text-sm hover:bg-[var(--bg-subtle)]">
+							<td class="py-3 pr-4">
+								<a href={ "/admin/users/" + u.UID } class="text-[var(--accent)] underline">{ u.Email }</a>
+							</td>
+							<td class="py-3 pr-4 font-mono">{ u.Name }</td>
+							<td class="py-3 pr-4 font-mono text-[var(--fg-muted)] text-xs">{ u.UID }</td>
+							<td class="py-3 pr-4">{ strconv.Itoa(u.DrawingCount) }</td>
+							<td class="py-3 pr-4">
+								if u.IsVIP {
+									<span class="text-xs font-bold text-[var(--peach)]">VIP</span>
+								}
+							</td>
+							<td class="py-3 pr-4 text-[var(--fg-muted)] text-xs">{ u.CreatedAt.Format("2006-01-02 15:04") }</td>
+							<td class="py-3 pr-4 text-[var(--fg-muted)] text-xs">{ u.LastSeen.Format("2006-01-02 15:04") }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+templ UserDetailPage(u UserEntry, drawings []DrawingEntry) {
+	@AdminLayout("User: "+u.Email, "") {
+		<a href="/admin/users" class="text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)] no-underline hover:text-[var(--fg)]">&larr; Back to Users</a>
+		<h1 class="text-lg font-bold font-heading uppercase tracking-wider mt-4 mb-6">{ u.Email }</h1>
+		<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+			@StatCard("UID", u.UID)
+			@StatCard("Name", u.Name)
+			@StatCard("Drawings", strconv.Itoa(u.DrawingCount))
+			@StatCard("VIP", func() string { if u.IsVIP { return "Yes" }; return "No" }())
+		</div>
+		<h2 class="text-sm font-bold uppercase tracking-wider mb-4">Drawings</h2>
+		if len(drawings) == 0 {
+			<p class="text-sm text-[var(--fg-muted)]">No drawings.</p>
+		} else {
+			<div class="overflow-x-auto">
+				<table class="w-full text-left border-collapse">
+					<thead>
+						<tr class="border-b-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)]">
+							<th class="py-3 pr-4">Title</th>
+							<th class="py-3 pr-4">ID</th>
+							<th class="py-3 pr-4">Shared</th>
+							<th class="py-3 pr-4">Created</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, d := range drawings {
+							<tr class="border-b border-[var(--border)] text-sm">
+								<td class="py-3 pr-4">{ d.Title }</td>
+								<td class="py-3 pr-4 font-mono text-[var(--fg-muted)] text-xs">{ d.ID }</td>
+								<td class="py-3 pr-4">
+									if d.HasShare {
+										<span class="text-xs font-bold text-[var(--teal)]">Yes</span>
+									}
+								</td>
+								<td class="py-3 pr-4 text-[var(--fg-muted)] text-xs">{ d.CreatedAt.Format("2006-01-02 15:04") }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+templ DrawingsPage(drawings []DrawingEntry) {
+	@AdminLayout("Drawings", "/admin/drawings") {
+		<h1 class="text-lg font-bold font-heading uppercase tracking-wider mb-6">Drawings</h1>
+		<div class="overflow-x-auto">
+			<table class="w-full text-left border-collapse">
+				<thead>
+					<tr class="border-b-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)]">
+						<th class="py-3 pr-4">Title</th>
+						<th class="py-3 pr-4">Owner</th>
+						<th class="py-3 pr-4">ID</th>
+						<th class="py-3 pr-4">Shared</th>
+						<th class="py-3 pr-4">Created</th>
+						<th class="py-3 pr-4">Updated</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, d := range drawings {
+						<tr class="border-b border-[var(--border)] text-sm hover:bg-[var(--bg-subtle)]">
+							<td class="py-3 pr-4 font-medium">{ d.Title }</td>
+							<td class="py-3 pr-4">
+								<a href={ "/admin/users/" + d.OwnerID } class="text-[var(--accent)] underline">{ d.OwnerEmail }</a>
+							</td>
+							<td class="py-3 pr-4 font-mono text-[var(--fg-muted)] text-xs">{ d.ID }</td>
+							<td class="py-3 pr-4">
+								if d.HasShare {
+									<span class="text-xs font-bold text-[var(--teal)]">Yes</span>
+								}
+							</td>
+							<td class="py-3 pr-4 text-[var(--fg-muted)] text-xs">{ d.CreatedAt.Format("2006-01-02 15:04") }</td>
+							<td class="py-3 pr-4 text-[var(--fg-muted)] text-xs">{ d.UpdatedAt.Format("2006-01-02 15:04") }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+templ HubPage(rooms []HubRoomEntry) {
+	@AdminLayout("WebSocket Hub", "/admin/hub") {
+		<h1 class="text-lg font-bold font-heading uppercase tracking-wider mb-6">WebSocket Hub</h1>
+		if len(rooms) == 0 {
+			<p class="text-sm text-[var(--fg-muted)]">No active rooms.</p>
+		} else {
+			<div class="overflow-x-auto">
+				<table class="w-full text-left border-collapse">
+					<thead>
+						<tr class="border-b-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)]">
+							<th class="py-3 pr-4">Room</th>
+							<th class="py-3 pr-4">Peers</th>
+							<th class="py-3 pr-4">Messages</th>
+							<th class="py-3 pr-4">Age</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, r := range rooms {
+							<tr class="border-b border-[var(--border)] text-sm font-mono">
+								<td class="py-3 pr-4">{ r.Key }</td>
+								<td class="py-3 pr-4">{ strconv.Itoa(r.Peers) }</td>
+								<td class="py-3 pr-4">{ strconv.FormatInt(r.Msgs, 10) }</td>
+								<td class="py-3 pr-4 text-[var(--fg-muted)]">{ r.Age }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+templ SystemPage(dbSize string, walSize string, goVersion string, numCPU int, numGoroutine int, uptime string, memoryMB string) {
+	@AdminLayout("System", "/admin/system") {
+		<h1 class="text-lg font-bold font-heading uppercase tracking-wider mb-6">System</h1>
+		<div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+			@StatCard("Database", dbSize)
+			@StatCard("WAL", walSize)
+			@StatCard("Go Version", goVersion)
+			@StatCard("CPUs", strconv.Itoa(numCPU))
+			@StatCard("Goroutines", strconv.Itoa(numGoroutine))
+			@StatCard("Uptime", uptime)
+			@StatCard("Heap (approx)", memoryMB)
+		</div>
+	}
+}
+
+templ VipPage(entries []WhitelistEntry) {
+	@AdminLayout("VIP Whitelist", "/admin/vip") {
+		<h1 class="text-lg font-bold font-heading uppercase tracking-wider mb-6">VIP Whitelist</h1>
+		<form hx-post="/admin/vip/add" hx-target="#vip-list" hx-swap="beforeend" class="flex gap-2 mb-6">
+			<input type="email" name="email" placeholder="user@example.com" required
+				class="flex-1 border-2 border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2 text-sm font-mono placeholder:text-[var(--fg-muted)]"/>
+			<button type="submit" class="btn btn-primary text-xs">Add</button>
+		</form>
+		<ul id="vip-list" class="space-y-1">
+			if len(entries) == 0 {
+				<p class="text-sm text-[var(--fg-muted)]">No VIPs yet.</p>
+			}
+			for _, e := range entries {
+				@VipItem(e)
+			}
+		</ul>
+	}
+}
+
+templ VipItem(e WhitelistEntry) {
+	<li class="flex items-center justify-between border-2 border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3">
 		<div>
-			<div class="email">{ e.Email }</div>
-			<div class="meta">Added { e.CreatedAt.Format("2006-01-02 15:04") }</div>
+			<div class="text-sm font-mono">{ e.Email }</div>
+			<div class="text-xs text-[var(--fg-muted)]">Added { e.CreatedAt.Format("2006-01-02 15:04") }</div>
 		</div>
 		<button
-			class="revoke"
+			class="border-2 border-[var(--pink)] text-[var(--pink)] px-3 py-1 text-xs font-bold uppercase tracking-wider hover:bg-[var(--pink)] hover:text-[var(--bg)] transition-all"
 			hx-delete={ "/admin/vip/remove?email=" + e.Email }
 			hx-target="closest li"
 			hx-swap="outerHTML"

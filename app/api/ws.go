@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"time"
@@ -30,6 +31,27 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+}
+
+// CollabStatusHandler returns the number of online collaborators for a drawing.
+// Designed for the owner's page to poll and decide whether to upgrade to WebSocket.
+// Route: GET /api/draw/{id}/collab-status  (auth required)
+func CollabStatusHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	hub.mu.RLock()
+	room, ok := hub.rooms["draw:"+id]
+	hub.mu.RUnlock()
+
+	online := 0
+	if ok {
+		room.mu.Lock()
+		online = len(room.clients)
+		room.mu.Unlock()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{"online": online})
 }
 
 // WsStatsHandler exposes a plain-text snapshot of all active hub rooms.

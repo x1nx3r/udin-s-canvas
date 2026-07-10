@@ -77,17 +77,22 @@ func main() {
 
 	// WebSocket routes
 	mux.Handle("GET /api/draw/{id}/ws", lib.RequireAuth(api.OwnerWSHandler))
+	mux.Handle("GET /api/draw/{id}/collab-status", lib.RequireAuth(api.CollabStatusHandler))
 	mux.HandleFunc("GET /api/shared/{slug}/ws", api.GuestWSHandler)
 	mux.HandleFunc("GET /api/ws/stats", api.WsStatsHandler) // plain-text hub diagnostic
 
 	// Super-admin panel (404 for everyone else)
 	adminMux := http.NewServeMux()
+	adminMux.HandleFunc("GET /admin", admin.PageHandler)
+	adminMux.HandleFunc("GET /admin/users", admin.PageHandler)
+	adminMux.HandleFunc("GET /admin/users/{uid}", admin.PageHandler)
+	adminMux.HandleFunc("GET /admin/drawings", admin.PageHandler)
+	adminMux.HandleFunc("GET /admin/hub", admin.PageHandler)
+	adminMux.HandleFunc("GET /admin/system", admin.PageHandler)
 	adminMux.HandleFunc("GET /admin/vip", admin.PageHandler)
 	adminMux.HandleFunc("POST /admin/vip/add", admin.AddHandler)
 	adminMux.HandleFunc("DELETE /admin/vip/remove", admin.RemoveHandler)
 	mux.Handle("/admin/", lib.RequireSuperAdmin(adminMux))
-
-
 
 	// Middleware
 	wrapped := lib.Middleware(mux)

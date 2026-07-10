@@ -47,10 +47,25 @@ func Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), UserUIDKey, token.UID)
-		if email, ok := token.Claims["email"].(string); ok {
+		uid := token.UID
+		ctx := context.WithValue(r.Context(), UserUIDKey, uid)
+		email, _ := token.Claims["email"].(string)
+		if email != "" {
 			ctx = context.WithValue(ctx, UserEmailKey, email)
 		}
+		name, _ := token.Claims["name"].(string)
+
+		// Track the user in the admin panel's users table.
+		_, err = DB.Exec(
+			`INSERT INTO users (uid, email, name, created_at, last_seen)
+			 VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+			 ON CONFLICT(uid) DO UPDATE SET email=excluded.email, name=CASE WHEN excluded.name IS NOT NULL AND excluded.name != '' THEN excluded.name ELSE users.name END, last_seen=CURRENT_TIMESTAMP`,
+			uid, email, name,
+		)
+		if err != nil {
+			log.Printf("track user %s: %v", uid, err)
+		}
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

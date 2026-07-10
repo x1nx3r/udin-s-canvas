@@ -69,11 +69,29 @@ func (r *Room) add(client *Client) {
 	r.mu.Unlock()
 }
 
+var collabEndedMsg = []byte(`{"type":"COLLAB_ENDED"}`)
+
 func (r *Room) remove(client *Client) {
 	r.mu.Lock()
-	if _, ok := r.clients[client]; ok {
-		delete(r.clients, client)
-		close(client.Send)
+	if _, ok := r.clients[client]; !ok {
+		r.mu.Unlock()
+		return
+	}
+	delete(r.clients, client)
+	close(client.Send)
+
+	// If only one client remains, tell them collaboration ended
+	// so they can downgrade from WS to HTTP solo mode.
+	if len(r.clients) == 1 {
+		for c := range r.clients {
+			select {
+			case c.Send <- collabEndedMsg:
+			default:
+				log.Printf("[hub] COLLAB_ENDED DROP key=%s remote=%s buffer full", r.key, c.Conn.RemoteAddr())
+				close(c.Send)
+				delete(r.clients, c)
+			}
+		}
 	}
 	r.mu.Unlock()
 }
@@ -121,6 +139,9 @@ func (r *Room) handleMessage(sender *Client, msg []byte) {
 		r.mu.Lock()
 		r.lastElements = scene.Payload.Elements
 		r.mu.Unlock()
+		r.broadcastAllBut(sender, msg)
+	case "SCENE_DELTA":
+		// Pure forward. No storage, no parsing.
 		r.broadcastAllBut(sender, msg)
 	case "MOUSE_LOCATION":
 		r.broadcastAllBut(sender, msg)
@@ -188,6 +209,31 @@ func deleteRoomIfEmpty(key string) {
 		_ = r
 		delete(hub.rooms, key)
 	}
+}
+
+// HubRoomInfo is a snapshot of a single room for the admin panel.
+type HubRoomInfo struct {
+	Key   string
+	Peers int
+	Msgs  int64
+	Age   string
+}
+
+// HubRooms returns a structured snapshot of all active rooms (admin panel use).
+func HubRooms() []HubRoomInfo {
+	hub.mu.RLock()
+	defer hub.mu.RUnlock()
+	out := make([]HubRoomInfo, 0, len(hub.rooms))
+	for key, r := range hub.rooms {
+		peers, msgs, age := r.snapshot()
+		out = append(out, HubRoomInfo{
+			Key:   key,
+			Peers: peers,
+			Msgs:  msgs,
+			Age:   age.Round(time.Second).String(),
+		})
+	}
+	return out
 }
 
 func HubStats() string {

@@ -9,8 +9,14 @@ import (
 )
 
 var DB *sql.DB
+var dbPath string
 
-func InitDB(dbPath string) {
+func GetDBPath() string {
+	return dbPath
+}
+
+func InitDB(path string) {
+	dbPath = path
 	var err error
 	DB, err = sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on")
 	if err != nil {
@@ -65,6 +71,15 @@ func migrate() {
 		CREATE TABLE IF NOT EXISTS feature_whitelist (
 			email      TEXT PRIMARY KEY,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		-- User tracking for admin panel.
+		CREATE TABLE IF NOT EXISTS users (
+			uid        TEXT PRIMARY KEY,
+			email      TEXT,
+			name       TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			last_seen  DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 	`)
 	if err != nil {

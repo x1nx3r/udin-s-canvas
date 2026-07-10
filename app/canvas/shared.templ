@@ -126,6 +126,7 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 					var reconciled = Bundle.reconcileElements(existing, restored, appState);
 					reconciled = Bundle.bumpElementVersions(reconciled, existing);
 					_lastSceneVersion = Bundle.getSceneVersion(reconciled);
+					_sceneElements = reconciled;
 					_api.updateScene({ elements: reconciled, captureUpdate: Bundle.CaptureUpdateAction.NEVER });
 				}
 
@@ -214,7 +215,11 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 						if (version > _lastSceneVersion) {
 							_lastSceneVersion = version;
 							if (_ws && _ws.readyState === WebSocket.OPEN && _username) {
-								_ws.send(JSON.stringify({ type: 'SCENE_UPDATE', payload: { elements: elements } }));
+								// Compute and send delta
+								_ws.send(JSON.stringify({
+								type: 'SCENE_UPDATE',
+								payload: { elements: elements }
+							}));
 							}
 						}
 					};

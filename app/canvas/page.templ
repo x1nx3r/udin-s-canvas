@@ -134,6 +134,10 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 				var _sceneElements = [];
 
 				var _ws = null;
+				var _collabMode = false;
+				var _collabPollInterval = null;
+				var _wsSendQueue = [];
+
 				function handleRemoteScene(remoteElements) {
 					if (!window.excalidrawAPI) return;
 					var api = window.excalidrawAPI;
@@ -144,16 +148,70 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 					var reconciled = Bundle.reconcileElements(existing, restored, appState);
 					reconciled = Bundle.bumpElementVersions(reconciled, existing);
 					_lastSceneVersion = Bundle.getSceneVersion(reconciled);
+					_sceneElements = reconciled;
 					api.updateScene({ elements: reconciled, captureUpdate: Bundle.CaptureUpdateAction.NEVER });
+				}
+
+				function checkCollabStatus() {
+					if (_collabMode) return;
+					fetch('/api/draw/' + id + '/collab-status')
+						.then(function(r) { return r.json(); })
+						.then(function(data) {
+							if (data.online > 0) upgradeToCollab();
+						})
+						.catch(function() {});
+				}
+
+				function upgradeToCollab() {
+					if (_collabMode) return;
+					_collabMode = true;
+					if (_collabPollInterval) {
+						clearInterval(_collabPollInterval);
+						_collabPollInterval = null;
+					}
+					connectWS();
+				}
+
+				function downgradeToSolo() {
+					if (!_collabMode) return;
+					_collabMode = false;
+					if (_ws) {
+						_ws.onclose = null;
+						_ws.close();
+						_ws = null;
+					}
+					_collabPollInterval = setInterval(checkCollabStatus, 1000);
+					if (_dirty && _scene) flushIfDirty();
+				}
+
+				function wsSend(msg) {
+					if (_ws && _ws.readyState === WebSocket.OPEN) {
+						_ws.send(msg);
+					} else if (_ws && _ws.readyState === WebSocket.CONNECTING) {
+						_wsSendQueue.push(msg);
+					}
 				}
 
 				function connectWS() {
 					var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
 					_ws = new WebSocket(proto + '//' + location.host + '/api/draw/' + id + '/ws');
+					_ws.onopen = function() {
+						while (_wsSendQueue.length > 0) {
+							_ws.send(_wsSendQueue.shift());
+						}
+						if (_sceneElements.length > 0) {
+							_ws.send(JSON.stringify({
+								type: 'SCENE_UPDATE',
+								payload: { elements: _sceneElements }
+							}));
+						}
+					};
 					_ws.onmessage = function(event) {
 						try {
 							var payload = JSON.parse(event.data);
-							if (payload.type === 'SCENE_INIT' || payload.type === 'SCENE_UPDATE') {
+							if (payload.type === 'COLLAB_ENDED') {
+								downgradeToSolo();
+							} else if (payload.type === 'SCENE_INIT' || payload.type === 'SCENE_UPDATE') {
 								handleRemoteScene(payload.payload.elements || []);
 							} else if (payload.type === 'MOUSE_LOCATION' && payload.payload && payload.payload.clientId && window.excalidrawAPI) {
 								_collaborators.set(payload.payload.clientId, {
@@ -165,7 +223,20 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 						} catch(e) { console.error('[ws] onmessage error:', e); }
 					};
 					_ws.onclose = function() {
-						setTimeout(connectWS, 1000 + Math.random() * 2000);
+						setTimeout(function() {
+							if (_collabMode) {
+								fetch('/api/draw/' + id + '/collab-status')
+									.then(function(r) { return r.json(); })
+									.then(function(data) {
+										if (_collabMode && data.online > 0) {
+											connectWS();
+										} else {
+											downgradeToSolo();
+										}
+									})
+									.catch(function() { downgradeToSolo(); });
+							}
+						}, 500);
 					};
 					_ws.onerror = function() { _ws.close(); };
 				}
@@ -188,11 +259,11 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 									_lastSceneVersion = getSceneVersion(data.elements);
 									api.updateScene({ elements: data.elements, appState: data.appState });
 								}
-								connectWS();
+								_collabPollInterval = setInterval(checkCollabStatus, 1000);
 							})
 							.catch(function(e) {
 								console.error('Load error:', e);
-								connectWS();
+								_collabPollInterval = setInterval(checkCollabStatus, 1000);
 							});
 					},
 					onChange: function(elements, appState) {
@@ -202,14 +273,17 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 						var version = getSceneVersion(elements);
 						if (version > _lastSceneVersion) {
 							_lastSceneVersion = version;
-							if (_ws && _ws.readyState === WebSocket.OPEN) {
-								_ws.send(JSON.stringify({ type: 'SCENE_UPDATE', payload: { elements: elements } }));
+							if (_collabMode && _ws) {
+								wsSend(JSON.stringify({
+									type: 'SCENE_UPDATE',
+									payload: { elements: elements }
+								}));
 							}
 						}
 					},
 					onPointerUpdate: function(payload) {
-						if (_ws && _ws.readyState === WebSocket.OPEN && payload.pointer) {
-							_ws.send(JSON.stringify({
+						if (_collabMode && _ws && payload.pointer) {
+							wsSend(JSON.stringify({
 								type: 'MOUSE_LOCATION',
 								payload: {
 									clientId: 'owner-' + id,
@@ -253,6 +327,7 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 					};
 
 					function flushIfDirty() {
+						if (_collabMode) return;
 						if (!_dirty || !_scene) return;
 						_dirty = false;
 						var snapshot = _scene;
@@ -272,6 +347,12 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 
 					window.addEventListener('beforeunload', function() {
 						if (!_dirty || !_scene) return;
+						if (_ws && _ws.readyState === WebSocket.OPEN) {
+							_ws.send(JSON.stringify({
+								type: 'SCENE_UPDATE',
+								payload: { elements: _sceneElements }
+							}));
+						}
 						navigator.sendBeacon(
 							'/api/draw/' + id + '/save',
 							new Blob([JSON.stringify(_scene)], { type: 'application/json' })
