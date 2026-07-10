@@ -1,6 +1,9 @@
 package canvas
 
-import "gotth/app/components"
+import (
+	"gotth/app/assets"
+	"gotth/app/components"
+)
 
 templ CanvasPage(title string, drawingId string) {
 	<!DOCTYPE html>
@@ -13,7 +16,7 @@ templ CanvasPage(title string, drawingId string) {
 			<link rel="preconnect" href="https://fonts.googleapis.com"/>
 			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
 			<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
-			<link rel="stylesheet" href="/globals.css"/>
+			<link rel="stylesheet" href={ "/globals.css?v=" + assets.CSSHash }/>
 			<link rel="stylesheet" href="/static/excalidraw.css"/>
 			<!-- <link rel="stylesheet" href="/static/excalidraw-brutalist.css"/> -->
 			<script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>

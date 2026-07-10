@@ -1,5 +1,7 @@
 package app
 
+import "gotth/app/assets"
+
 templ CanvasLayout(title string) {
 	<!DOCTYPE html>
 	<html lang="en" class="h-full">
@@ -17,7 +19,7 @@ templ CanvasLayout(title string) {
 			<link rel="preconnect" href="https://fonts.googleapis.com"/>
 			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
 			<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
-			<link rel="stylesheet" href="/globals.css"/>
+			<link rel="stylesheet" href={ "/globals.css?v=" + assets.CSSHash }/>
 			<link rel="stylesheet" href="/static/excalidraw.css"/>
 			<!-- <link rel="stylesheet" href="/static/excalidraw-brutalist.css"/> -->
 			<script>

@@ -1,0 +1,39 @@
+package components
+
+templ AuthBarDesktop(name string, photoURL string) {
+	<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">
+		<span class="text-xs font-bold text-[var(--fg-muted)]">{ name }</span>
+		<a href="/profile" class="h-8 w-8 border-2 border-[var(--border)] overflow-hidden shrink-0">
+			<img src={ photoURL } alt="" class="h-full w-full object-cover"/>
+		</a>
+		<form method="POST" action="/auth/logout">
+			<button type="submit" class="btn btn-primary px-3 py-1.5 text-xs">Logout</button>
+		</form>
+	</div>
+}
+
+templ AuthBarMobile(name string, photoURL string) {
+	<div id="auth-bar-mobile" hx-swap-oob="true" class="flex flex-col gap-3">
+		<div class="flex items-center gap-2">
+			<a href="/profile" class="h-8 w-8 border-2 border-[var(--border)] overflow-hidden shrink-0">
+				<img src={ photoURL } alt="" class="h-full w-full object-cover"/>
+			</a>
+			<span class="text-xs font-bold text-[var(--fg)]">{ name }</span>
+		</div>
+		<form method="POST" action="/auth/logout">
+			<button type="submit" class="btn btn-primary px-3 py-1.5 text-xs w-full">Logout</button>
+		</form>
+	</div>
+}
+
+templ SignInBarDesktop() {
+	<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">
+		<button onclick="signInWithGoogle()" class="btn btn-primary px-3 py-1.5 text-xs">Sign In</button>
+	</div>
+}
+
+templ SignInBarMobile() {
+	<div id="auth-bar-mobile" hx-swap-oob="true" class="flex flex-col gap-2">
+		<button onclick="signInWithGoogle()" class="btn btn-primary px-3 py-1.5 text-xs">Sign In</button>
+	</div>
+}

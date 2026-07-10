@@ -31,7 +31,7 @@ func main() {
 	// Globals CSS (embedded binary) with cache busting
 	mux.Handle("GET /globals.css", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css")
-		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		w.Header().Set("ETag", `"`+assets.CSSHash+`"`)
 		w.Write(assets.CSS)
 	}))

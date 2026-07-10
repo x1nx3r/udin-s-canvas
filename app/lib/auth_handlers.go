@@ -3,9 +3,9 @@ package lib
 import (
 	"log"
 	"net/http"
-)
 
-const navBtnClass = `btn btn-primary px-3 py-1.5 text-xs`
+	"gotth/app/components"
+)
 
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -39,7 +39,8 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("HX-Redirect", "/drawings")
-	w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2"></div>`))
+	// Page redirects immediately; auth bar swap is cosmetic only.
+	w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true"></div>`))
 }
 
 func LogoutHandler(w http.ResponseWriter, r *http.Request) {
@@ -58,9 +59,8 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("HX-Redirect", "/")
-	w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` +
-		`<button onclick="signInWithGoogle()" class="` + navBtnClass + `">Sign In</button>` +
-		`</div>`))
+	// Page redirects immediately; auth bar swap is cosmetic only.
+	w.Write([]byte(`<div id="auth-bar" hx-swap-oob="true"></div>`))
 }
 
 func UserHandler(w http.ResponseWriter, r *http.Request) {
@@ -68,22 +68,16 @@ func UserHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html")
 	if uid == "" {
-		signInBtn := `<button onclick="signInWithGoogle()" class="` + navBtnClass + `">Sign In</button>`
-		w.Write([]byte(
-			`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` + signInBtn + `</div>` +
-			`<div id="auth-bar-mobile" hx-swap-oob="true" class="flex flex-col gap-2">` + signInBtn + `</div>`,
-		))
+		components.SignInBarDesktop().Render(r.Context(), w)
+		components.SignInBarMobile().Render(r.Context(), w)
 		return
 	}
 
 	user, err := FirebaseAuth.GetUser(r.Context(), uid)
 	if err != nil {
 		log.Printf("get user: %v", err)
-		signInBtn := `<button onclick="signInWithGoogle()" class="` + navBtnClass + `">Sign In</button>`
-		w.Write([]byte(
-			`<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` + signInBtn + `</div>` +
-			`<div id="auth-bar-mobile" hx-swap-oob="true" class="flex flex-col gap-2">` + signInBtn + `</div>`,
-		))
+		components.SignInBarDesktop().Render(r.Context(), w)
+		components.SignInBarMobile().Render(r.Context(), w)
 		return
 	}
 
@@ -92,27 +86,6 @@ func UserHandler(w http.ResponseWriter, r *http.Request) {
 		name = user.Email
 	}
 
-	desktop := `<div id="auth-bar" hx-swap-oob="true" class="flex items-center gap-2">` +
-		`<span class="text-xs font-bold text-[var(--fg-muted)]">` + name + `</span>` +
-		`<a href="/profile" class="h-8 w-8 border-2 border-[var(--border)] overflow-hidden shrink-0">` +
-		`<img src="` + user.PhotoURL + `" alt="" class="h-full w-full object-cover"/>` +
-		`</a>` +
-		`<form method="POST" action="/auth/logout">` +
-		`<button type="submit" class="` + navBtnClass + `">Logout</button>` +
-		`</form>` +
-		`</div>`
-
-	mobile := `<div id="auth-bar-mobile" hx-swap-oob="true" class="flex flex-col gap-3">` +
-		`<div class="flex items-center gap-2">` +
-		`<a href="/profile" class="h-8 w-8 border-2 border-[var(--border)] overflow-hidden shrink-0">` +
-		`<img src="` + user.PhotoURL + `" alt="" class="h-full w-full object-cover"/>` +
-		`</a>` +
-		`<span class="text-xs font-bold text-[var(--fg)]">` + name + `</span>` +
-		`</div>` +
-		`<form method="POST" action="/auth/logout">` +
-		`<button type="submit" class="` + navBtnClass + ` w-full">Logout</button>` +
-		`</form>` +
-		`</div>`
-
-	w.Write([]byte(desktop + mobile))
+	components.AuthBarDesktop(name, user.PhotoURL).Render(r.Context(), w)
+	components.AuthBarMobile(name, user.PhotoURL).Render(r.Context(), w)
 }

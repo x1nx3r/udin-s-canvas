@@ -1,5 +1,20 @@
-// Package main scans .templ files for responsive CSS classes
-// and generates app/_entry.css combining @source inline() with globals.css.
+// Package main scans .templ files for responsive CSS class variants
+// and generates app/_entry.css by prepending @source inline() to globals.css.
+//
+// CONTRACT — read before adding classes:
+//
+//  1. This tool ONLY scans .templ source files. It does NOT scan:
+//     - Go string constants (e.g. constants in auth_handlers.go)
+//     - JavaScript strings embedded inside <script> blocks in templates
+//     - Any .go file outside of .templ
+//
+//  2. Non-responsive classes (no sm:/md:/lg:/xl:/dark: prefix) are picked up
+//     automatically by Tailwind's own content scanner at build time.
+//     Only responsive/dark variants need @source inline().
+//
+//  3. If you add a responsive variant to a Go string constant or a JS string,
+//     you MUST manually add it to app/_source.html so it survives Tailwind's
+//     purge step. The generate-css target will not catch it.
 package main
 
 import (

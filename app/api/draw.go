@@ -162,8 +162,8 @@ func ThumbnailHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = lib.DB.ExecContext(r.Context(),
-		"UPDATE drawings SET thumbnail = ?, updated_at = ? WHERE id = ?",
-		string(body), time.Now(), id)
+		"INSERT OR REPLACE INTO drawing_thumbnails (drawing_id, data, updated_at) VALUES (?, ?, datetime('now'))",
+		id, string(body))
 	if err != nil {
 		http.Error(w, "save failed", http.StatusInternalServerError)
 		return
