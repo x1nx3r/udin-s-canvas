@@ -129,17 +129,29 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 					var mount = document.getElementById('canvas-mount');
 					var _dirty = false;
 					var _scene = null;
-					var _wsElements = null;
-					// Fingerprint of the last network update used to detect echo onChange calls.
-					var _networkFingerprint = null;
-					// Live collaborator cursor map: clientId -> { pointer, username }
+					// Loop guard: set to true immediately before calling updateScene() with
+					// a remote payload. The resulting onChange fires synchronously in the
+					// same JS event-loop turn, sees the flag, and skips re-broadcasting.
+					var _suppressNextChange = false;
+					// Collaborator cursor map keyed by clientId.
 					var _collaborators = new Map();
 
-					function buildFingerprint(elements) {
-						if (!elements || !elements.length) return '';
-						return elements.map(function(el) {
-							return el.id + ':' + el.versionNonce;
-						}).sort().join(',');
+					// rAF throttle: accumulate onChange calls within one frame,
+					// send only the latest state once per animation frame (~60fps).
+					var _pendingBroadcast = null;
+					var _broadcastScheduled = false;
+					function scheduleBroadcast(elements) {
+						_pendingBroadcast = elements;
+						if (!_broadcastScheduled) {
+							_broadcastScheduled = true;
+							requestAnimationFrame(function() {
+								_broadcastScheduled = false;
+								if (_pendingBroadcast && _ws && _ws.readyState === WebSocket.OPEN) {
+									_ws.send(JSON.stringify({ type: 'update', elements: _pendingBroadcast }));
+								}
+								_pendingBroadcast = null;
+							});
+						}
 					}
 
 					// WebSocket — broadcaster (owner sends all local changes to the hub).
@@ -151,8 +163,8 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 							try {
 								var payload = JSON.parse(event.data);
 								if (payload.type === 'update' && payload.elements) {
-									_wsElements = payload.elements;
-									_networkFingerprint = buildFingerprint(payload.elements);
+									// Suppress the onChange that updateScene() will fire.
+									_suppressNextChange = true;
 									window.excalidrawAPI.updateScene({ elements: payload.elements });
 								} else if (payload.type === 'pointer' && payload.clientId) {
 									_collaborators.set(payload.clientId, {
@@ -190,20 +202,18 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 						},
 						onChange: function(elements, appState) {
 							_scene = { elements: elements, appState: appState };
-							// Loop guard: if this onChange is a reaction to a network updateScene(),
-							// the fingerprint will match. Persist the change (dirty) but don't re-broadcast.
-							var fp = buildFingerprint(elements);
-							if (fp && fp === _networkFingerprint) {
-								_networkFingerprint = null;
-								_dirty = true; // persist guest changes via owner autosave
+							// Loop guard: if this onChange was triggered by a remote updateScene(),
+							// suppress re-broadcasting. Still mark dirty so owner autosave persists
+							// guest changes.
+							if (_suppressNextChange) {
+								_suppressNextChange = false;
+								_dirty = true;
 								return;
 							}
-							_networkFingerprint = null;
 							_dirty = true;
-							// Genuine local change — broadcast to the hub.
-							if (_ws && _ws.readyState === WebSocket.OPEN) {
-								_ws.send(JSON.stringify({ type: 'update', elements: elements }));
-							}
+							// Throttle to one send per animation frame to avoid flooding
+							// the socket with every intermediate pointer position.
+							scheduleBroadcast(elements);
 						},
 						onPointerUpdate: function(payload) {
 							if (_ws && _ws.readyState === WebSocket.OPEN) {

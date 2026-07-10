@@ -103,8 +103,8 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 				var allowPublicEdits = mount.dataset.allowPublicEdits === 'true';
 
 				var _api = null;
-				var _wsElements = null;
-				var _networkFingerprint = null;
+				// Loop guard for updateScene -> onChange echo prevention.
+				var _suppressNextChange = false;
 				var _collaborators = new Map();
 
 				// Identity: persisted across page reloads within the same browser session.
@@ -115,11 +115,22 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 				}
 				var _username = sessionStorage.getItem('collab_username') || null;
 
-				function buildFingerprint(elements) {
-					if (!elements || !elements.length) return '';
-					return elements.map(function(el) {
-						return el.id + ':' + el.versionNonce;
-					}).sort().join(',');
+				// rAF throttle: accumulate onChange calls within one frame,
+				// send only the latest state once per animation frame (~60fps).
+				var _pendingBroadcast = null;
+				var _broadcastScheduled = false;
+				function scheduleBroadcast(elements) {
+					_pendingBroadcast = elements;
+					if (!_broadcastScheduled) {
+						_broadcastScheduled = true;
+						requestAnimationFrame(function() {
+							_broadcastScheduled = false;
+							if (_pendingBroadcast && _ws && _ws.readyState === WebSocket.OPEN && _username) {
+								_ws.send(JSON.stringify({ type: 'update', elements: _pendingBroadcast }));
+							}
+							_pendingBroadcast = null;
+						});
+					}
 				}
 
 				// WebSocket with randomized backoff reconnect (thundering herd protection).
@@ -131,8 +142,7 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 						try {
 							var payload = JSON.parse(event.data);
 							if (payload.type === 'update' && _api && payload.elements) {
-								_wsElements = payload.elements;
-								_networkFingerprint = buildFingerprint(payload.elements);
+								_suppressNextChange = true;
 								_api.updateScene({ elements: payload.elements });
 							} else if (payload.type === 'pointer' && payload.clientId && payload.clientId !== _clientId) {
 								_collaborators.set(payload.clientId, {
@@ -200,18 +210,14 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 				if (allowPublicEdits) {
 					excalidrawProps.onChange = function(elements, appState) {
 						// Loop guard: skip re-broadcasting if this onChange is a reaction
-						// to a remote updateScene() call (fingerprint will match).
-						var fp = buildFingerprint(elements);
-						if (fp && fp === _networkFingerprint) {
-							_networkFingerprint = null;
+						// to a remote updateScene() call.
+						if (_suppressNextChange) {
+							_suppressNextChange = false;
 							return; // Network echo — drop silently, don't broadcast
 						}
-						_networkFingerprint = null;
 
-						// Genuine local change — broadcast to the hub.
-						if (_ws && _ws.readyState === WebSocket.OPEN && _username) {
-							_ws.send(JSON.stringify({ type: 'update', elements: elements }));
-						}
+						// Genuine local change — throttle and broadcast to the hub.
+						scheduleBroadcast(elements);
 					};
 
 					excalidrawProps.onPointerUpdate = function(payload) {
