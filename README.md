@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/assets/public/logo.svg" width="96" height="96" alt="IMPHISE" style="border: 2px solid var(--border); padding: 8px;" />
+  <img src="app/assets/public/logo.svg" width="96" height="96" alt="IMPHISE" />
 </p>
 
 <h1 align="center">Ingin Menjadi Programmer Handal Namun Enggan Subscribe Excalidraw</h1>
@@ -10,109 +10,150 @@
 
 Draw boxes. Connect them. Call it architecture.
 
-An Excalidraw wrapper that actually works. No SaaS emails, no subscription
-to unlock the felt-tip pen, no "upgrade to pro to export as PNG." Just draw.
+An Excalidraw wrapper that actually works. No SaaS emails, no subscription to unlock the felt-tip pen, no "upgrade to pro to export as PNG." Just draw.
 
-**IMPHISE** is a Go + Templ + HTMX + Tailwind v4 app that wraps Excalidraw,
-saves to SQLite, shares via links, and runs as a single binary on a $5 VPS.
+**IMPHISE** is a Go + Templ + HTMX + Tailwind v4 app that wraps Excalidraw, persists to SQLite, shares via read-only links, and ships as a single binary to a $5 VPS. Peak memory: ~16 MB.
+
+---
 
 ## Stack
 
 | Layer | Choice | Reason |
 |---|---|---|
-| Language | Go | Compiles to a binary. No runtime. No `node_modules`. |
-| Templates | Templ | Type-safe HTML that doesn't make you want to cry. |
-| CSS | Tailwind v4 (standalone) | Utility classes. Custom CSS generation for responsive variants. |
-| Interactivity | HTMX | Server-rendered HTML fragments. No virtual DOM. |
-| Auth | Firebase Auth Web SDK | Google sign-in. ID tokens. Server-verified session cookies. |
-| Database | SQLite (`mattn/go-sqlite3`) | Single file. WAL mode. Zero config. CGO required. |
-| Canvas | Excalidraw 0.18.1 (bundled) | 8MB of someone else's hard work. I just render it. |
+| Language | Go 1.22+ | Compiles to a binary. No runtime. No `node_modules` on the server. |
+| Templates | Templ | Type-safe HTML. Compile-time errors instead of runtime template panics. |
+| CSS | Tailwind v4 (standalone binary) | Utility-first. Custom Go tool handles `.templ` file scanning. |
+| Interactivity | HTMX | Server-rendered HTML fragments. No virtual DOM, no hydration waterfall. |
+| Auth | Firebase Auth Web SDK + Admin SDK | Google sign-in. ID tokens verified server-side. http-only session cookies. |
+| Database | SQLite (`mattn/go-sqlite3`) | Single file. WAL mode. Zero config. Survives deploys via symlink. |
+| Canvas | Excalidraw 0.18.1 (esbuild bundle) | ~8 MB of someone else's hard work. We just render it. |
+| Dev server | Air | Live reload on Go file changes. |
+
+---
 
 ## Getting Started
 
+**Prerequisites:** Go 1.22+, Node.js (for the esbuild bundle step), `gcc` (for CGO/SQLite).
+
 ```bash
-# Prerequisites: Go 1.22+, Node (for the excalidraw bundle), CGO (for SQLite)
-make setup     # installs templ, tailwind, downloads deps
-make dev       # live-reloading dev server on :3000
+make setup   # installs templ, air, standalone tailwind binary; runs npm install
+make dev     # css watch + air live-reload server on :3000
 ```
 
-Or just:
+Or bare minimum, if the Excalidraw bundle and CSS already exist:
 
 ```bash
 go run .
 ```
 
-Open [http://localhost:3000](http://localhost:3000). You'll see a landing
-page. Click "Start Drawing." Sign in with Google. Draw a box. It saves
-automatically because I didn't want you to lose your masterpiece.
+Open [http://localhost:3000](http://localhost:3000). Sign in with Google. Create a drawing. It saves automatically.
 
-**Note:** Requires `CGO_ENABLED=1` because of `mattn/go-sqlite3`. This is
-the only dependency that needs CGO. On macOS it just works. On Linux you
-might need `gcc` installed (it's usually there already). On the server,
-`deploy.sh` sets `CGO_ENABLED=1 GOOS=linux GOARCH=amd64` for cross-compilation.
+> **CGO note:** `mattn/go-sqlite3` requires `CGO_ENABLED=1`. On macOS it works out of the box. On Linux, `gcc` must be installed (usually already there). The deploy script cross-compiles with `CGO_ENABLED=1 GOOS=linux GOARCH=amd64`.
+
+---
+
+## Make Targets
+
+| Target | What it does |
+|---|---|
+| `make setup` | Install `templ`, `air`, download standalone Tailwind binary, run `npm install`, generate templ files |
+| `make dev` | Compile CSS, start Tailwind watcher + Air live-reload server |
+| `make templ` | Re-generate `*_templ.go` from `.templ` files |
+| `make css` | Run `generate-css` then compile Tailwind → `app/assets/globals.css.output` |
+| `make generate-css` | Scan `.templ` files, extract responsive classes, write `app/_entry.css` |
+| `make bundle` | esbuild Excalidraw entry → `app/assets/public/excalidraw.bundle.js` |
+| `make build` | Full production build: css + templ + bundle + `go build` |
+
+---
 
 ## How It Works
 
 ### Auth Flow
 
 1. User clicks "Sign in with Google."
-2. Firebase Auth Web SDK opens a popup, user authenticates.
+2. Firebase Auth Web SDK opens a popup and the user authenticates.
 3. Client sends the ID token to `POST /auth/login`.
-4. Server verifies the token with the Firebase Admin SDK and creates an
-   http-only session cookie (`14 * 24 * time.Hour` expiry, `SameSite=Strict`).
-5. Middleware verifies the cookie on every request and injects the user's
-   `uid` into the request context.
+4. Server verifies the token with the Firebase Admin SDK, then sets an http-only session cookie (`14 * 24h` expiry, `SameSite=Strict`).
+5. `lib.Middleware` verifies the cookie on every request and injects the user's `uid` into `context.Context`.
 
-That's it. No JWT parsing on the client. No `localStorage` tokens. No
-"refresh token rotation" blog post you'll read at 2AM and immediately forget.
+No JWT parsing on the client. No `localStorage` tokens. No refresh token rotation.
 
-Login redirects to `/drawings`, logout redirects to `/`. Both handled via
-HTMX `HX-Redirect` headers — the form `POST` triggers a full page navigation
-without any JavaScript on the client side.
+Login and logout both use HTMX `HX-Redirect` headers — the form `POST` triggers a full page navigation without any client-side JS routing.
 
-### Canvas Save/Load
+---
 
-Excalidraw fires an `onChange` callback on every user action. The client
-debounces this with a 2-second timer. When the timer fires, it sends the
-entire scene (elements + appState) to `POST /api/draw/{id}/save`. The
-server writes it to SQLite as a JSON blob in the `content` column.
+### Canvas: Save & Load
 
-Loading is the reverse: `GET /api/draw/{id}/data` reads from SQLite,
-sanitizes the `appState.collaborators` field (because Excalidraw crashes
-if that's not an array — ask me how I know), and returns the scene.
+**Load:** When Excalidraw mounts, `excalidrawAPI` callback fires. The client fetches `GET /api/draw/{id}/data`, gets the scene JSON, and calls `api.updateScene()`. The server sanitizes `appState.collaborators` to an empty array before responding — Excalidraw crashes if that field is not an array.
+
+**Autosave — dirty-bit pattern:**
+
+```
+onChange fires (every element move, keypress, etc.)
+  → _scene = { elements, appState }   // O(1), no timers created
+  → _dirty = true
+```
+
+```
+setInterval(flushIfDirty, 3000)
+  → if !_dirty: no-op
+  → _dirty = false   // claim before async — prevents double-send
+  → snapshot = _scene
+  → fetch POST /api/draw/{id}/save  { keepalive: true }
+  → on success: generateThumbnail()
+  → on failure: _dirty = true        // restore; next tick retries
+```
+
+```
+beforeunload
+  → if !_dirty: no-op (interval already flushed)
+  → navigator.sendBeacon('/api/draw/{id}/save', JSON blob)
+  → browser delivers this even after the page unloads
+```
+
+The `saveDrawing()` button calls `flushIfDirty()` directly — one code path for all three triggers. Maximum accepted data loss: ~3 seconds (one interval tick). Browser crash or power loss is not covered; that's a contract you accept with any autosave system.
+
+**Why not the old `setTimeout` debounce?**
+The previous implementation reset a 2-second timer on every `onChange` event. If the user drew continuously and closed the tab within that window, the final `fetch` never fired and the user saw stale data on the next open. The dirty-bit pattern eliminates the timer storm entirely and delegates the flush to the interval + beacon.
+
+---
 
 ### SQLite
 
-The database is a single `canvas.db` file with WAL mode, busy timeout of
-5 seconds, and foreign keys enabled. The schema:
+Single file, WAL mode, 5-second busy timeout, foreign keys on, `MaxOpenConns(1)`.
 
 ```sql
+-- Core drawing record
 CREATE TABLE drawings (
-    id TEXT PRIMARY KEY,
-    owner_id TEXT NOT NULL,
-    title TEXT NOT NULL DEFAULT 'Untitled',
-    content TEXT,
-    share_slug TEXT UNIQUE,
-    thumbnail TEXT,
+    id         TEXT PRIMARY KEY,
+    owner_id   TEXT NOT NULL,
+    title      TEXT NOT NULL DEFAULT 'Untitled',
+    content    TEXT,                      -- full Excalidraw scene JSON
+    share_slug TEXT UNIQUE,               -- nullable; set on first share
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_drawings_owner ON drawings(owner_id);
+CREATE INDEX idx_drawings_owner      ON drawings(owner_id);
 CREATE INDEX idx_drawings_share_slug ON drawings(share_slug);
+
+-- Thumbnails live in a separate table so list queries don't
+-- drag up to 100 KB of base64 PNG per row.
+CREATE TABLE drawing_thumbnails (
+    drawing_id TEXT PRIMARY KEY REFERENCES drawings(id) ON DELETE CASCADE,
+    data       TEXT NOT NULL,             -- base64-encoded PNG, ≤100 KB
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
-`content` stores the full Excalidraw scene as JSON. `thumbnail` stores a
-base64-encoded PNG (under 100KB). `share_slug` is nullable — only set when
-the drawing is shared. The app uses `MaxOpenConns(1)` because SQLite doesn't
-handle concurrent writers well, and WAL mode + busy timeout handles the rest.
+**WAL checkpoint:** A background goroutine runs `PRAGMA wal_checkpoint(PASSIVE)` every 5 minutes. PASSIVE mode never blocks readers or writers — it just reclaims WAL pages when no readers are holding a snapshot. Without this, the WAL file accumulates indefinitely between server restarts.
 
-On the server, the database lives in `/var/www/udin-canvas/shared/canvas.db`
-and is symlinked into each release directory. This means deploys never
-touch the database — it persists across atomic symlink swaps.
+**Data persistence across deploys:** The database lives in `/var/www/udin-canvas/shared/canvas.db` and is symlinked into each release directory. Deploys never touch the database.
+
+---
 
 ### Excalidraw Bundle
 
-Excalidraw is bundled at build time via esbuild:
+Excalidraw is bundled at build time:
 
 ```bash
 npx esbuild app/assets/excalidraw/entry.js \
@@ -123,197 +164,195 @@ npx esbuild app/assets/excalidraw/entry.js \
   --global-name=ExcalidrawBundle
 ```
 
-The entry point exports `Excalidraw`, `React`, `ReactDOM`, and
-`exportToBlob` as globals. The output is ~8MB. It lives in the binary via
-`//go:embed`. The CSS is a separate file (also embedded) that gets linked
-in the page head.
+The entry point exposes `Excalidraw`, `React`, `ReactDOM`, and `exportToBlob` as globals on `window.ExcalidrawBundle`. The output is ~8 MB. It lives in the binary via `//go:embed`. The CSS is a separate embedded file linked in the page head.
 
-Versions are pinned to exact (`@excalidraw/excalidraw: 0.18.1`,
-`react: 18.3.1`, `react-dom: 18.3.1`) because Excalidraw's CSS classes
-change between versions, and our brutalist override stylesheet depends on
-specific selectors.
+Versions are pinned to exact (`@excalidraw/excalidraw: 0.18.1`, `react: 18.3.1`, `react-dom: 18.3.1`) because Excalidraw's internal CSS class names shift between versions and our override stylesheet depends on specific selectors.
+
+---
 
 ### Sharing
 
-Clicking "Share" hits `POST /api/draw/{id}/share`, which generates a
-16-byte random hex slug, stores it on the drawing, and returns it. The
-share dialog shows a read-only URL (`/shared/{slug}`). Anyone with that
-URL can view the drawing — no auth required.
+`POST /api/draw/{id}/share` generates a 16-byte random hex slug, stores it on the drawing row, and returns it. The share dialog renders a read-only link (`/shared/{slug}`). Anyone with the URL can view the drawing — no auth required.
 
-The shared page uses Excalidraw in `viewModeEnabled: true`. It loads the
-scene from `GET /api/shared/{slug}/data`, which does a public query
-(no auth middleware) by matching the `share_slug` column.
+The shared page renders Excalidraw with `viewModeEnabled: true`. Scene data is served by `GET /api/shared/{slug}/data`, which is a public endpoint (no auth middleware) that queries by `share_slug`.
+
+---
 
 ### Thumbnails
 
-After every save, the client calls `exportToBlob` (exported from the
-Excalidraw bundle) to generate a PNG thumbnail. If the blob is under
-100KB, it gets base64-encoded and stored in the `thumbnail` column. The
-dashboard shows these thumbnails in a grid. If there's no thumbnail, you
-get a placeholder with the drawing title.
+After every successful save, `exportToBlob` renders a PNG thumbnail of the current canvas. If the blob is under 100 KB, it gets base64-encoded and stored in `drawing_thumbnails`. The dashboard renders these in a grid. Drawings without a thumbnail get a placeholder with the drawing title.
 
-### CSS Generation (Tailwind v4 Responsive Classes)
+Thumbnails are kept in a separate table specifically so `SELECT * FROM drawings` on the dashboard doesn't load up to 100 KB of PNG data per row.
 
-Tailwind v4's `@source` directive doesn't scan `.templ` files by default.
-This means responsive variants like `sm:hidden`, `md:flex`, `lg:grid-cols-3`
-silently disappear from the output. No warnings. No errors. Just broken
-responsive layouts on mobile. For hours.
+---
 
-The fix: a custom Go tool (`tools/generate_css/main.go`) that:
+### Tailwind v4 + `.templ` Files
 
-1. Scans all `.templ` files in `app/`
-2. Extracts CSS classes matching responsive patterns (`sm:`, `md:`, `lg:`, `xl:`, `dark:`)
-3. Generates `app/_entry.css` with `@source inline("...")` declarations
-4. Appends the contents of `globals.css`
+Tailwind v4's `@source` directive doesn't scan `.templ` files by default. Responsive variants like `sm:hidden`, `md:flex`, `lg:grid-cols-3` silently disappear from the output — no warnings, no errors, just broken layouts.
 
-This gets fed to `npx @tailwindcss/cli` which now sees all responsive
-classes. The `make css` target runs this pipeline.
+The fix is `tools/generate_css/main.go`:
 
-```bash
-make css   # generate-css → tailwind → globals.css.output
-```
+1. Scans all `.templ` files under `app/`
+2. Extracts classes matching responsive/variant patterns (`sm:`, `md:`, `lg:`, `xl:`, `dark:`, etc.)
+3. Writes `app/_entry.css` with `@source inline("...")` declarations containing every extracted class
+4. Appends `globals.css` contents
 
-The `globals.css.output` is embedded into the Go binary via `//go:embed`
-and served with cache-busting ETags (SHA256 hash).
+`make css` runs this pipeline → standalone Tailwind binary compiles the result → output embedded in the binary.
+
+---
 
 ### CSS Cache Busting
 
-The embedded CSS is served with:
-- `Cache-Control: no-cache, must-revalidate`
-- `ETag: "<sha256-hash>"` computed at init time
+The compiled CSS is embedded in the binary and served at `/globals.css` with:
+- `Cache-Control: public, max-age=31536000, immutable`
+- `ETag: "<sha256-of-css-content>"` computed at startup
 
-Cloudflare aggressively caches static assets. The `no-cache` directive
-was being ignored by Cloudflare's CDN layer, causing stale CSS to be
-served. The ETag at least lets browsers revalidate properly.
+Template links include a `?v=<hash>` query parameter. When the CSS changes, the hash changes, the URL changes, the CDN fetches a new copy. No manual Cloudflare cache purge required (in theory — in practice, purge anyway).
 
-If you deploy and the spacing looks wrong, purge Cloudflare's cache.
-This is not a bug. This is Cloudflare being Cloudflare.
+---
 
 ### Excalidraw Theming
 
-Excalidraw's default CSS has rounded corners, soft shadows, and a color
-scheme that doesn't match anything. I wrote an override stylesheet
-(`excalidraw-brutalist.css`) that maps Excalidraw's internal CSS variables
-to our design tokens, sets `border-radius: 0` everywhere, replaces soft
-shadows with hard offset shadows (`4px 4px 0px`), and applies 2px borders
-to everything that stands still long enough.
+A brutalist override stylesheet (`excalidraw-brutalist.css`) remaps Excalidraw's internal CSS variables to our design tokens: `border-radius: 0` everywhere, hard offset shadows (`4px 4px 0px`), 2px borders, Catppuccin palette.
 
-The theme toggle syncs with Excalidraw's internal state. When you flip
-from Latte to Mocha, the canvas follows without needing a page reload.
+The theme toggle syncs with Excalidraw's internal theme state via `api.updateScene({ appState: { theme } })`. A `MutationObserver` on `document.documentElement` watches for class changes (added by `toggleTheme()`) and propagates them to the canvas — so the canvas follows the rest of the UI without a page reload.
 
-The canvas background uses Catppuccin's `--ctp-base` color instead of
-white, so the canvas feels like part of the app rather than a foreign
-iframe.
+---
 
-### PWA Manifest
+## Route Map
 
-A `manifest.json` is embedded and served with the correct `Content-Type`.
-Layout templates include the `<meta>` tags for theme-color and
-apple-mobile-web-app-capable. No service worker yet — that's a problem
-for future me.
+| Method | Path | Handler | Auth | Response |
+|---|---|---|---|---|
+| `GET` | `/` | `app.PageHandler` | No | Templ (landing) |
+| `GET` | `/drawings` | `dashboard.PageHandler` | Yes | Templ |
+| `POST` | `/draw/new` | `dashboard.NewHandler` | Yes | Redirect |
+| `GET` | `/draw/{id}` | `canvas.PageHandler` | Yes | Templ |
+| `GET` | `/profile` | `profile.PageHandler` | Yes | Templ |
+| `GET` | `/api/draw/{id}/data` | `api.DataHandler` | Yes | JSON |
+| `POST` | `/api/draw/{id}/save` | `api.SaveHandler` | Yes | JSON |
+| `POST` | `/api/draw/{id}/share` | `api.ShareHandler` | Yes | JSON |
+| `PUT` | `/api/draw/{id}/rename` | `api.RenameHandler` | Yes | JSON |
+| `POST` | `/api/draw/{id}/thumbnail` | `api.ThumbnailHandler` | Yes | JSON |
+| `DELETE` | `/api/draw/{id}` | `api.DeleteHandler` | Yes | JSON |
+| `GET` | `/shared/{slug}` | `canvas.SharedPageHandler` | No | Templ |
+| `GET` | `/api/shared/{slug}/data` | `api.SharedDataHandler` | No | JSON |
+| `POST` | `/auth/login` | `lib.LoginHandler` | No | HX-Redirect |
+| `POST` | `/auth/logout` | `lib.LogoutHandler` | No | HX-Redirect |
+| `GET` | `/auth/user` | `lib.UserHandler` | No | HTML fragment |
+
+---
 
 ## Project Structure
 
 ```
-main.go                          # Routes, middleware, static serving
+main.go                        # Route registration, static serving, server startup
 app/
-  lib/                           # Shared infrastructure
-    auth.go                      # Firebase Admin SDK init
-    middleware.go                # Session cookie verification, RequireAuth
-    auth_handlers.go             # Login/logout/user + navBtnClass
-    db.go                        # SQLite init, WAL mode, schema migration
-  api/                           # API handlers (no HTML rendering)
-    draw.go                      # Data, Save, Share, Rename, Thumbnail, Delete
-    shared.go                    # Public shared data handler (no auth)
-  canvas/                        # Canvas pages (Excalidraw editor)
-    page.templ                   # Canvas editor with responsive title bar
-    shared.templ                 # Read-only shared view
+  lib/
+    auth.go                    # Firebase Admin SDK init, session cookie helpers
+    auth_handlers.go           # Login / logout / user fragment handlers
+    db.go                      # SQLite init, WAL mode, schema migration, checkpoint goroutine
+    middleware.go              # Session verification, RequireAuth wrapper
+  api/
+    draw.go                    # Data, Save, Share, Rename, Thumbnail, Delete handlers
+    shared.go                  # Public shared-drawing data handler (no auth)
+  canvas/
+    page.go                    # Canvas page handler
+    page.templ                 # Excalidraw editor: title bar, bridge JS, dirty-bit autosave
+    shared.go                  # Shared canvas page handler
+    shared.templ               # Read-only Excalidraw view
   dashboard/
-    page.templ                   # Drawing list + new drawing
+    page.go                    # Dashboard handler + NewDrawing handler
+    page.templ                 # Drawing grid, empty state, new drawing button
   profile/
-    page.templ                   # User profile with drawing grid
+    page.go                    # Profile handler
+    page.templ                 # User info display
   components/
-    navigation.templ             # Hamburger menu (mobile) + desktop nav
-    logo.templ                   # Icon-only on mobile, text on desktop
-    drawing_card.templ           # Card with thumbnail, rename, delete
-    footer.templ                 # GOTTH badge + IMPHISE copyright
-    empty_state.templ            # Empty state for dashboard
-  layout.templ                   # Root HTML shell (Bungee + Space Mono, Firebase, PWA)
-  canvas_layout.templ            # Minimal shell for Excalidraw pages
-  page.templ                     # Landing page (hero, features, CTA)
-  globals.css                    # Catppuccin tokens, Tailwind, Bungee + Space Mono
+    navigation.templ           # Desktop nav + hamburger menu
+    logo.templ                 # Icon-only on mobile, text on sm:+
+    drawing_card.templ         # Thumbnail card with rename / delete
+    footer.templ               # GOTTH badge + copyright
+    empty_state.templ          # "No drawings yet" CTA
+  layout.templ                 # Root HTML shell (fonts, Firebase SDK, HTMX, PWA meta)
+  canvas_layout.templ          # Minimal shell for canvas pages
+  page.templ                   # Landing page (hero, feature grid, CTA)
+  globals.css                  # Catppuccin tokens, design system, Tailwind directives
+  _entry.css                   # Generated: @source inline() + globals.css (do not hand-edit)
+  _responsive.css              # Manually curated responsive overrides
   assets/
-    excalidraw/                  # Excalidraw source (entry.js, package.json)
-    public/                      # Static files (logo, bundle, brutalist CSS, manifest)
-    assets.go                    # go:embed directives + CSSHash
-  _entry.css                     # Generated: @source inline() + globals.css
+    excalidraw/
+      entry.js                 # Excalidraw esbuild entry point
+      package.json             # Pinned: excalidraw 0.18.1, react 18.3.1
+    public/
+      excalidraw.bundle.js     # Built by `make bundle` (~8 MB, embedded in binary)
+      excalidraw.css           # Excalidraw's own CSS (embedded)
+      logo.svg                 # App logo
+      manifest.json            # PWA manifest
+    assets.go                  # //go:embed directives + CSSHash (SHA256)
 tools/
-  generate_css/main.go           # Scan templ → extract responsive classes → _entry.css
+  generate_css/main.go         # Scan .templ → extract responsive classes → _entry.css
 ```
 
-### Layout Unification
+---
 
-All pages use one of two layout templates:
+## Design System
 
-- **`Layout`** — Full HTML shell with nav, footer, Firebase SDK, HTMX. Used
-  by landing, dashboard, and profile pages.
+**Catppuccin Brutalist.** Sharp corners, hard offset shadows, Catppuccin palette.
 
-- **`CanvasLayout`** — Minimal HTML shell for Excalidraw pages (just the head
-  with fonts, theme init, PWA meta tags).
+- **Fonts:** Bungee (headings), Space Mono (body/UI/mono)
+- **Borders:** 2px solid. Always.
+- **Shadows:** Hard offset — `2px 2px`, `4px 4px`, `6px 6px`, `8px 8px`. No blur. No spread.
+- **Radius:** Zero. No exceptions.
+- **Buttons:** Translate on active (`translate-x-0.5 translate-y-0.5`), shadow collapses to zero.
+- **Grid:** Subtle colored grid lines (pink/blue in light mode, mauve/lavender in dark).
+- **Dark mode:** Defaults to system preference. Toggle persists to `localStorage`.
 
-### Responsive Design
+### Color Tokens
 
-Every page adapts to mobile:
+| Token | Latte (Light) | Mocha (Dark) | Usage |
+|---|---|---|---|
+| `--bg` | `#eff1f5` | `#1e1e2e` | Page background |
+| `--fg` | `#4c4f69` | `#cdd6f4` | Body text |
+| `--fg-muted` | `#8c8fa1` | `#6c7086` | Secondary text |
+| `--bg-subtle` | `#e6e9ef` | `#181825` | Card backgrounds |
+| `--border` | `#4c4f69` | `#cdd6f4` | All borders |
+| `--accent` | `#8839ef` | `#cba6f7` | Primary actions, focus rings |
+| `--mauve` | `#8839ef` | `#cba6f7` | Secondary accent |
+| `--pink` | `#ea76cb` | `#f5c2e7` | Feature cards, hover states |
+| `--peach` | `#fe640b` | `#fab387` | Accent borders |
+| `--teal` | `#179299` | `#94e2d5` | Feature cards |
+| `--blue` | `#1e66f5` | `#89b4fa` | Grid lines, links |
+| `--lavender` | `#7287fd` | `#b4befe` | Grid lines, secondary |
 
-- **Navigation**: Hamburger menu on mobile (`md:hidden`/`md:flex`), full nav on desktop
-- **Logo**: Icon-only on mobile, text on `sm:` and up
-- **Auth bar**: Returns both `#auth-bar` (desktop) and `#auth-bar-mobile` (mobile)
-  via `hx-swap-oob="true"` — mobile gets stacked layout with full-width buttons
-- **Landing page**: Single column on mobile, multi-column on `sm:`/`lg:`
-- **Dashboard**: Stacked cards on mobile, grid on `sm:grid-cols-2`
-- **Canvas title bar**: Logo hidden on mobile, input shrinks, links collapse
-- **Decorative elements**: Hidden on mobile, visible on `md:` and up
-
-### Auth Bar
-
-The nav auth bar is loaded via HTMX on every page. The server returns
-consistent HTML with a shared brutalist button class defined once in
-`auth_handlers.go` as `navBtnClass`:
-
-```
-px-3 py-1.5 border-2 border-[var(--accent)] bg-[var(--accent)]
-text-[var(--accent-fg)] text-xs font-bold uppercase tracking-wider
-cursor-pointer hover:bg-[var(--mauve)] transition-all
-active:translate-x-0.5 active:translate-y-0.5 active:shadow-none
-shadow-[2px_2px_0px_0px_var(--accent)]
-```
+---
 
 ## Deployment
 
-The app deploys as a single binary to a bare-metal VPS via atomic symlink swap.
-
-### The Flow
+Ships as a single binary to a bare-metal VPS via atomic symlink swap. Zero downtime.
 
 ```bash
 bash deploy.sh
 ```
 
-1. **Local build:** `make css && make templ && CGO_ENABLED=1 go build`
-2. **rsync:** Binary + Firebase JSON + Makefile.server → timestamped release dir
-3. **Atomic swap:** `ln -nfs` points `current` → new release
-4. **Symlink DB:** SQLite files in `shared/` are symlinked into the new release
-5. **Restart:** `systemd restart udin-canvas`
-6. **Clean up:** Old releases compressed to `.tar.xz` (keep last 5)
+### What `deploy.sh` Does
 
-Zero downtime. Binary is ~61MB, DB is a single file, deploy takes ~50s.
+1. **Local build:** `make css && make templ && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build`
+2. **rsync:** Binary + Firebase service account JSON + server-side `Makefile.server` → timestamped release dir on the server
+3. **Atomic swap:** `ln -nfs` points `current/` → new release directory
+4. **Symlink DB:** `canvas.db` (and WAL files) in `shared/` are symlinked into the new release — database is never touched by a deploy
+5. **Restart:** `systemctl restart udin-canvas`
+6. **Cleanup:** Old releases archived to `.tar.xz`, keeping the last 5
+
+Binary is ~61 MB (Excalidraw bundle embedded). Deploy takes ~50 seconds.
 
 ### Server Setup
 
-- **Reverse proxy:** Caddy → app port
-- **Service:** systemd unit with memory limit
-- **Database:** shared SQLite file (persists across deploys via symlinks)
-- **Peak memory:** ~16MB
-- **CDN:** Cloudflare (aggressive caching, purge when CSS changes)
+| Concern | Solution |
+|---|---|
+| Reverse proxy | Caddy → app port |
+| Process manager | systemd unit with memory limit |
+| Database | Shared SQLite file, persists via symlinks |
+| CDN | Cloudflare (aggressive caching; purge on CSS change) |
+| Peak memory | ~16 MB |
 
 ### Environment Variables
 
@@ -322,110 +361,53 @@ Zero downtime. Binary is ~61MB, DB is a single file, deploy takes ~50s.
 | `PORT` | No | `3000` | HTTP listen port |
 | `SQLITE_DB_PATH` | No | `./canvas.db` | Path to SQLite database file |
 
-The Firebase service account JSON is auto-detected by scanning for
-`-firebase-adminsdk-*.json` in the working directory.
+Firebase service account: auto-detected by scanning for `*-firebase-adminsdk-*.json` in the working directory.
 
-## The Suffering Log
-
-Things that went wrong during development, in roughly chronological order:
-
-1. **Firestore → SQLite migration** — Moved from a managed service to a
-   single file. Had to rewrite every query handler. Worth it.
-
-2. **Login/logout routing** — The login handler set `HX-Redirect: /drawings`
-   but the logout handler used `HX-Redirect: /`. Both work. Neither was
-   obvious. The logout form also had `hx-boost="false"` which was silently
-   swallowing the `HX-Redirect` header. Removed it. Fixed.
-
-3. **Excalidraw canvas text font** — Set `body { font-family: 'Space Mono' }`
-   in globals.css. This leaked into Excalidraw's canvas text input. Added
-   a CSS reset in `excalidraw-brutalist.css` targeting `.excalidraw .text-editor`.
-   Still persists. Accepted as a minor issue.
-
-4. **Double branding** — Logo component was rendering in both the navigation
-   AND the landing page hero section. Removed it from the landing page.
-   Logo now only appears in nav and canvas pages.
-
-5. **Tailwind v4 responsive classes silently disappearing** — `sm:hidden`,
-   `md:flex`, `lg:grid-cols-3` were all missing from the CSS output. No
-   warnings. No errors. Just broken layouts. Spent hours debugging before
-   discovering that Tailwind v4's `@source` doesn't scan `.templ` files.
-   Built a Go tool to fix it.
-
-6. **`@source inline()` not working** — Thought `@source inline("sm:hidden md:flex")`
-   would tell Tailwind to generate those classes. It doesn't. The classes
-   must appear in the source files Tailwind scans. The fix: include the
-   actual `.templ` content via `@source inline()` with the full class list,
-   or concatenate the templ file contents as CSS comments.
-
-7. **Cloudflare caching stale CSS** — Deployed new CSS, still serving old
-   version. The `Cache-Control: no-cache` header was being overwritten by
-   Cloudflare's CDN layer. Had to add ETag-based cache busting and still
-   need manual cache purge on deploy.
-
-8. **Font choices** — Started with Cinzel (headings) + Inter (body) +
-   Fira Code (mono). Changed to Bungee (headings) + Space Mono (body/UI).
-   Had to update every template, layout, and CSS file. Then the Space Mono
-   leaked into Excalidraw. The font saga continues.
-
-9. **Mobile nav** — Built a hamburger menu with vanilla JS (`toggleMobileMenu()`).
-   Used `md:hidden`/`md:flex` for responsive visibility. Then discovered the
-   responsive classes weren't being generated. See item 5.
-
-10. **Auth bar OOB swap** — `UserHandler` returns HTML for both `#auth-bar`
-    (desktop) and `#auth-bar-mobile` (mobile) with `hx-swap-oob="true"`.
-    The mobile version has a stacked layout with full-width logout button.
-    This required changing the handler to return both elements in a single
-    response, which HTMX then surgically inserts into the DOM.
-
-## Design System
-
-**Catppuccin Brutalist** — sharp corners, hard offset shadows, Catppuccin palette.
-
-- **Fonts:** Bungee (headings), Space Mono (body/UI)
-- **Borders:** 2px solid, always
-- **Shadows:** Hard offset (`2px 2px`, `4px 4px`, `6px 6px`, `8px 8px`), no blur
-- **Colors:** Catppuccin Latte (light) + Mocha (dark) with extended accent tokens
-- **Buttons:** Translate on active (`translate-x-0.5 translate-y-0.5`), shadow disappears
-- **Radius:** Zero. Everywhere. No exceptions.
-- **Grid:** Subtle colored grid lines (pink/blue light, mauve/lavender dark)
-
-### Color Tokens
-
-| Token | Latte (Light) | Mocha (Dark) | Usage |
-|---|---|---|---|
-| `--accent` | `#8839ef` | `#cba6f7` | Primary actions |
-| `--mauve` | `#8839ef` | `#cba6f7` | Secondary accent |
-| `--pink` | `#ea76cb` | `#f5c2e7` | Feature cards, hover states |
-| `--peach` | `#fe640b` | `#fab387` | Accent borders |
-| `--teal` | `#179299` | `#94e2d5` | Feature cards |
-| `--blue` | `#1e66f5` | `#89b4fa` | Grid lines, links |
-| `--lavender` | `#7287fd` | `#b4befe` | Grid lines, secondary |
+---
 
 ## Load Testing
 
-Ran k6 load tests against the live server. Results at 500 VUs:
+k6 load test against the live server at 500 VUs:
 
 | Metric | Value |
 |---|---|
-| Error rate | 10.76% (all Cloudflare connection resets, 0% application errors) |
+| Error rate | 10.76% (all Cloudflare connection resets; 0% application errors) |
 | p95 latency | 739ms (Cloudflare overhead, not server) |
-| CRUD checks | 100% pass (create, save, load, rename, share, delete) |
+| CRUD pass rate | 100% (create, save, load, rename, share, delete) |
 
-The 10% error rate is entirely Cloudflare dropping connections during the
-ramp-up, not the server rejecting requests. The Go binary handles 500
-concurrent users with zero application-level errors.
+The Go binary handles 500 concurrent users with zero application-level errors. The 10% error rate is Cloudflare dropping connections during ramp-up.
+
+---
+
+## The Suffering Log
+
+Things that went wrong, in roughly chronological order.
+
+1. **Firestore → SQLite** — Moved from a managed service to a single file. Rewrote every query handler. Worth it.
+
+2. **Login/logout routing** — The logout form had `hx-boost="false"` which silently swallowed the `HX-Redirect` header. Removed it. Fixed.
+
+3. **Excalidraw canvas font** — `body { font-family: 'Space Mono' }` in `globals.css` leaked into Excalidraw's canvas text input. Added a reset in `excalidraw-brutalist.css` targeting `.excalidraw .text-editor`. Partially fixed.
+
+4. **Tailwind v4 responsive classes silently disappearing** — `sm:hidden`, `md:flex`, `lg:grid-cols-3` were all missing from CSS output. No warnings. No errors. Just broken layouts. Built a Go tool to scan `.templ` files and inject them via `@source inline()`.
+
+5. **Cloudflare caching stale CSS** — `Cache-Control: no-cache` was being overwritten by Cloudflare. Switched to content-hashed URLs with `immutable`. Purge on deploy anyway.
+
+6. **Auth bar OOB swap** — `UserHandler` returns HTML for both `#auth-bar` (desktop) and `#auth-bar-mobile` (mobile) with `hx-swap-oob="true"`. Required restructuring the handler to return both elements in a single response.
+
+7. **Autosave race on tab close** — The `setTimeout` debounce reset on every `onChange` event. User closes tab within the 2-second window → final `fetch` never fires → stale data on reopen. Replaced with dirty-bit + `setInterval` + `sendBeacon` on `beforeunload`. WAL checkpoint goroutine added to prevent the WAL file from ballooning.
+
+8. **`canvas.db-wal` grew to 4.2 MB** — SQLite's auto-checkpoint threshold is 1000 pages. Without explicit checkpointing, the WAL accumulates between server restarts. Fixed with `PRAGMA wal_checkpoint(PASSIVE)` on a 5-minute ticker.
+
+---
 
 ## Why Not Just Use Excalidraw's Built-In Save?
 
-Excalidraw has a "save to disk" button and a "load from disk" button. That
-works great for personal use. It doesn't work great for "I want to draw a
-diagram on my work computer and open it on my laptop without emailing
-myself a JSON file."
+Excalidraw has a "save to disk" button. That works fine for personal use. It doesn't work for "I want to open this diagram on a different machine without emailing myself a JSON file."
 
-SQLite is simpler than Firestore. No indexes to manage, no billing surprises,
-no "document size limit." A single `canvas.db` file with WAL mode handles
-everything I need. And it's backed up with a `cp` command.
+SQLite is simpler than any managed database. No indexes to manage, no billing surprises, no document size limits. A single `canvas.db` file. Backed up with `cp`.
+
+---
 
 ## License
 
