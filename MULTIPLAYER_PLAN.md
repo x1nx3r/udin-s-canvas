@@ -63,22 +63,24 @@ ws.onmessage = (event) => {
 };
 ```
 
-### Modifying the Dirty-Bit Hook
+### Modifying the Dirty-Bit Hook (The Infinite Loop Prevention)
 We hook into Excalidraw's `onChange` event to broadcast our local changes, while carefully ensuring we don't broadcast changes we just received from the network.
+
+**The Tripwire:** Using a simple boolean flag (like `_isRemoteUpdate`) is dangerous because `api.updateScene()` is asynchronous. If a user draws something at the exact millisecond the remote scene is updating, the local change gets swallowed.
+**The Fix:** Rely on Excalidraw's native element versioning (`version`/`versionNonce`) to detect if the change is genuinely local.
 
 ```javascript
 onChange: (elements, appState) => {
-    if (_isRemoteUpdate) {
-        // This change was triggered by the WebSocket. 
-        // Reset the flag and abort. Do NOT broadcast. Do NOT set dirty.
-        _isRemoteUpdate = false;
-        return;
+    // 1. Compare elements against the last known network state
+    // 2. If all element versions match what we just received, abort (it's an echo)
+    if (isIdenticalToNetworkState(elements)) {
+        return; 
     }
 
     _scene = { elements, appState };
     _dirty = true; // Flag for the 3-second SQLite autosave
     
-    // Broadcast the change to the dumb pipe
+    // Broadcast the genuine local change to the dumb pipe
     if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ elements }));
     }
@@ -119,6 +121,9 @@ If `deploy.sh` bounces the systemd service while 5 users are drawing:
 2. All 5 browsers execute their `beforeunload` or native WebSocket reconnect logic.
 3. The latest canvas state is naturally preserved via the `sendBeacon` POST request (which fires asynchronously on connection loss/page unload).
 4. When the new Go binary boots 1 second later, the clients reconnect, read the latest state from SQLite, and resume drawing. Zero data loss.
+
+**The EMP Tripwire (Thundering Herd):** If 500 users are dropped simultaneously during a deploy, 500 browsers instantly hammering the server to reconnect will cause a massive spike in TLS handshakes, potentially buckling Caddy or the Go runtime.
+**The Fix:** The client-side reconnect logic must use a randomized backoff (e.g., `setTimeout(() => connect(), 1000 + Math.random() * 2000)`) so the reconnects are safely staggered over several seconds.
 
 ---
 
