@@ -8,138 +8,136 @@
   <strong>Live: <a href="https://canvas.x1nx3r.dev" target="_blank">canvas.x1nx3r.dev</a></strong>
 </p>
 
+*NOW WITH MULTIPLAYER!*
+
 Draw boxes. Connect them. Call it architecture.
 
-An Excalidraw wrapper that actually works. No SaaS emails, no subscription to unlock the felt-tip pen, no "upgrade to pro to export as PNG." Just draw.
-
-**IMPHISE** is a Go + Templ + HTMX + Tailwind v4 app that wraps Excalidraw, persists to SQLite, shares via read-only links, ships as a single binary to a $5 VPS, and supports real-time collaboration via WebSocket — without holding your canvas data in server memory.
+Yet another Excalidraw wrapper because the original had the audacity to ask for money so I could export a PNG of my stick figures. This one uses SQLite, ships as a single binary, runs on a $5 VPS that's somehow cheaper than your monthly bubble tea habit, and also does real-time collaboration. Usually without crashing.
 
 ---
 
 ## Stack
 
-| Layer | Choice | Reason |
+| Thing | What we used | Why, though |
 |---|---|---|
-| Language | Go 1.22+ | Compiles to a binary. No runtime. No `node_modules` on the server. |
-| Templates | Templ | Type-safe HTML. Compile-time errors instead of runtime template panics. |
-| CSS | Tailwind v4 (standalone binary) | Utility-first. Custom Go tool handles `.templ` file scanning. |
-| Interactivity | HTMX | Server-rendered HTML fragments. No virtual DOM, no hydration waterfall. |
-| Auth | Firebase Auth Web SDK + Admin SDK | Google sign-in. ID tokens verified server-side. http-only session cookies. |
-| Database | SQLite (`mattn/go-sqlite3`) | Single file. WAL mode. Zero config. Survives deploys via symlink. |
-| Canvas | Excalidraw 0.18.1 (esbuild bundle) | ~8 MB of someone else's hard work. We just render it. |
-| Real-time | gorilla/websocket | Lightweight. No framework. No broker. No CRDT server-side. |
-| Dev server | Air | Live reload on Go file changes. |
+| Language | Go 1.22+ | Compiles to a screaming fast binary with no runtime. No JVM. No interpreter. No "but it works on my machine." Just a file you `scp` to a server and run. |
+| Templates | Templ | Type-safe HTML. Caught three bugs at compile time that would've been silent runtime failures. Which is three more bugs than I would've caught with normal templates. |
+| CSS | Tailwind v4 standalone | We write utility classes, it generates a CSS file. We also had to write a custom Go tool to scan `.templ` files because Tailwind decided not to support them natively. I'm not bitter. Okay, I'm a little bitter. |
+| Interactivity | HTMX | Server-rendered HTML fragments. No React for the normal parts of the website. Then we had to use React for the canvas anyway because Excalidraw is a React component and you can't exactly `hx-get` your way into an infinite canvas. But for everything else? HTMX. |
+| Auth | Firebase Auth | Google sign-in. We verify tokens server-side. http-only cookies. Your password stays between you and Google, which is none of our business. |
+| Database | SQLite | One file. Zero config. No "please wait while we provision your database instance." We have a background goroutine that runs `PRAGMA wal_checkpoint(PASSIVE)` every 5 minutes because otherwise the WAL file grows until your VPS runs out of disk space and nobody tells you until `df -h` breaks your heart. |
+| Canvas | Excalidraw 0.18.1 | ~8 MB of bundled JavaScript written by people smarter than us. We just mount it and pray. |
+| Real-time | gorilla/websocket | No framework. No message broker. No CRDT library. The server is a glorified megaphone — it takes bytes from one person and shouts them at everyone else. That's the whole architecture. |
 
 ---
 
-## The Big Idea
+## How It Works
 
-This app has one job: let you draw on a canvas and share it with people.
+Two modes. Zero user confusion (hopefully).
 
-It does this in two modes that trade off seamlessly without you ever noticing.
+### Solo Mode (What 99% of Users Experience)
 
-### Solo Mode (The 1,500+ VU Path)
-
-When you open a drawing alone, the server is **stateless**. Your browser runs a 3-second dirty-bit loop:
+You open a drawing. Nobody else is watching. The server never allocates a WebSocket for you. Your browser runs a dirty-bit loop every 3 seconds:
 
 ```
 onChange fires → _dirty = true
 
 setInterval(flushIfDirty, 3000)
-  → if !_dirty: no-op
-  → fetch POST /api/draw/{id}/save { keepalive: true }
-  → on failure: _dirty = true (retry next tick)
+  → if not dirty: you get a beer
+  → POST /api/draw/{id}/save with keepalive
+  → on failure: set dirty again (try next tick)
 
 beforeunload
   → navigator.sendBeacon('/api/draw/{id}/save', blob)
-  → delivered even after the page unloads
+  → yes this actually works unlike half the stuff in the Web API
 ```
 
-No WebSocket. No goroutine per tab. No hub room. Just a POST every 3 seconds. The Go server handles this like a static file server — parse request, write to SQLite, respond. **1,500 concurrent users at 94 MB memory.** The bottleneck is the Linux OOM killer at 128 MB, not the code.
+1,500 concurrent users. 15 MB Go heap. Zero errors. The bottleneck was Linux deciding to kill us at 128 MB of RAM, not anything in our code.
 
-### Collaboration Mode (The Lazy Socket)
+### Collaboration Mode (The Fancy Part Nobody Uses)
 
-When someone opens your shared link, the server detects them and signals your page. Your browser upgrades from HTTP to WebSocket on demand:
+Someone opens your shared link. The server snitches on them. Your browser reluctantly upgrades to WebSocket:
 
 ```
 1. Guest opens /shared/{slug}
-2. Guest's page connects WebSocket immediately
-3. Owner's page polls GET /api/draw/{id}/collab-status every 1s
-4. Poll returns online: 1 → owner upgrades to WebSocket
-5. Owner sends SCENE_UPDATE with full current scene
-6. Both now exchange SCENE_UPDATE on every onChange
-7. When last guest leaves → hub sends COLLAB_ENDED → owner downgrades to HTTP solo
+2. Guest connects WebSocket immediately (they're eager)
+3. Your page: "Are they still there?" polls every 1s
+4. Server: "Yeah there's one person"
+5. Your page: "Ugh, fine" → opens WebSocket
+6. You send a full SCENE_UPDATE
+7. Both of you now exchange full scenes on every onChange
+8. Last guest leaves → COLLAB_ENDED → WebSocket closes
+9. You go back to HTTP solo mode
+10. The poll keeps running but now it returns 0
+11. Nobody is watching you draw ever again
+12. It's just you and your boxes
+13. Like it should be
 ```
 
-The WebSocket is a **stateless pipe**. The Go server never interprets the canvas JSON — it just shuffles raw byte slices between connections. No CRDT merging, no element reconciliation, no state to recover after a crash. The server dies, restarts, clients reconnect, owner sends SCENE_UPDATE, everyone resyncs. **Zero data loss.**
-
-The `lastElements` cache in the hub is purely a convenience for `SCENE_INIT` on connect. It's loaded from SQLite and disposable. SQLite is the source of truth — the hub is just a hot cache.
+The WebSocket is a stateless pipe. The server never looks at your JSON. It just copies bytes. Server crash? Reconnect. Full SCENE_UPDATE resyncs. Zero data loss. The only state the server keeps is a convenience cache loaded from SQLite, and if that cache is wrong, the next full SCENE_UPDATE fixes it.
 
 ---
 
-## How It Actually Works
+## Auth
 
-### Auth Flow
+1. Click "Sign in with Google."
+2. Popup. Auth. Token.
+3. We verify the token server-side using Firebase Admin SDK.
+4. http-only cookie set for 14 days with `SameSite=Strict`.
+5. That's it. No JWT parsing on the client. No localStorage tokens that XSS can steal. We're not idiots. Well, not completely.
 
-1. User clicks "Sign in with Google."
-2. Firebase Auth Web SDK opens a popup and the user authenticates.
-3. Client sends the ID token to `POST /auth/login`.
-4. Server verifies the token with the Firebase Admin SDK, then sets an http-only session cookie (`14 * 24h` expiry, `SameSite=Strict`).
-5. `lib.Middleware` verifies the cookie on every request and injects the user's `uid` into `context.Context`.
+---
 
-No JWT parsing on the client. No `localStorage` tokens. No refresh token rotation. Login and logout both use HTMX `HX-Redirect` headers.
+## Persistence
 
-### Canvas Persistence
+**Loading:** Excalidraw mounts. `excalidrawAPI` fires. Fetch `GET /api/draw/{id}/data`. Call `api.updateScene()`. We sanitize `appState.collaborators` to an empty array first because Excalidraw will segfault — emotionally — if that field isn't an array. Found this one the fun way.
 
-**Load:** When Excalidraw mounts, `excalidrawAPI` callback fires. The client fetches `GET /api/draw/{id}/data`, gets the scene JSON, and calls `api.updateScene()`. The server sanitizes `appState.collaborators` to an empty array before responding — Excalidraw crashes if that field is not an array.
+**Saving (solo):** 3-second interval + `sendBeacon` on close. Worst case: you lose 3 seconds of drawing. If your browser crashes or your laptop dies mid-stroke, that's not our problem. You chose to draw in a web browser. You know the risks.
 
-**Save (solo):** 3-second dirty-bit interval + `sendBeacon` on tab close. Maximum data loss: one tick. Browser crash or power loss is not covered; that's a contract you accept with any autosave system.
+**Saving (collab):** HTTP save disabled. Everything goes through WebSocket as SCENE_UPDATE. The owner's 3-second HTTP timer still runs as a safety net. Yes, we send duplicate saves. No, we won't optimize it. We're too busy.
 
-**Save (collaboration):** HTTP save is disabled. Each client broadcasts `SCENE_UPDATE` over WebSocket. The owner's overlapping 3-second save still fires as a safety net (the `_collabMode` guard was removed — simplicity won over optimization).
+---
 
-### Wire Protocol
+## Wire Protocol
 
-| Type | Direction | Payload | Purpose |
+| Type | Direction | Payload | What it does |
 |---|---|---|---|
-| `SCENE_INIT` | Server → Client | `{ elements: [...] }` | Full scene on WS connect |
-| `SCENE_UPDATE` | Bidirectional | `{ payload: { elements: [...] } }` | Full scene sync |
-| `MOUSE_LOCATION` | Bidirectional | `{ payload: { pointer: {x,y}, username } }` | Live cursor positions |
-| `COLLAB_ENDED` | Server → Client | `{}` | Last collaborator left |
+| `SCENE_INIT` | Server → You | `{ elements: [...] }` | "Here's the current scene, don't screw it up" |
+| `SCENE_UPDATE` | Both ways | `{ payload: { elements: [...] } }` | "I changed this thing, update yourself" |
+| `MOUSE_LOCATION` | Both ways | `{ payload: { pointer: {x,y}, username } }` | "I'm over here" — "stop moving I can see you" |
+| `COLLAB_ENDED` | Server → You | `{}` | "You're alone again. Go back to HTTP. Forever." |
 
-No `SCENE_DELTA`. We tried that. The client-side delta reconstruction was brittle and buggy. Full scene updates at ~50 KB per frame are fine when there are 2-3 collaborators. The OOM problem only manifests at 50+ concurrent broadcasters — a scenario that doesn't happen in practice with the lazy socket (most users are solo).
+We had SCENE_DELTA. We deleted it. The delta reconstruction was buggy. Phantom diffs. Stale element caches. Race conditions. It worked in the load test. It broke in real life. Full SCENE_UPDATE at ~50 KB is fine when there's only 2-3 of you. The OOM apocalypse only happens at 50 people in one room, and with the lazy socket, most people don't even open a WebSocket. Problem solved. By avoiding it. That counts.
 
-### SQLite
+---
 
-Single file, WAL mode, 5-second busy timeout, foreign keys on, `MaxOpenConns(1)`.
+## SQLite
+
+Single file. WAL mode. 5-second busy timeout with `_busy_timeout=5000` because `database is locked` is the most useless error message in the history of databases. Foreign keys on. `MaxOpenConns(1)` because SQLite is a shy introvert that doesn't like being touched by multiple hands.
 
 ```sql
--- Core drawing record
 CREATE TABLE drawings (
     id         TEXT PRIMARY KEY,
     owner_id   TEXT NOT NULL,
     title      TEXT NOT NULL DEFAULT 'Untitled',
-    content    TEXT,                      -- full Excalidraw scene JSON
-    share_slug TEXT UNIQUE,               -- nullable; set on first share
+    content    TEXT,
+    share_slug TEXT UNIQUE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Thumbnails live in a separate table so list queries don't
--- drag up to 100 KB of base64 PNG per row.
 CREATE TABLE drawing_thumbnails (
     drawing_id TEXT PRIMARY KEY REFERENCES drawings(id) ON DELETE CASCADE,
-    data       TEXT NOT NULL,             -- base64-encoded PNG, ≤100 KB
+    data       TEXT NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
-**WAL checkpoint:** A background goroutine runs `PRAGMA wal_checkpoint(PASSIVE)` every 5 minutes. Without this, the WAL file accumulates indefinitely between server restarts.
+The WAL checkpoint goroutine exists because we once found the WAL file was 4.2 GB and the server was about to run out of disk. SQLite's auto-checkpoint threshold is 1000 pages. Nobody tells you this. I'm telling you this so you don't have to learn it at 3 AM on a Saturday.
 
-**Data persistence across deploys:** The database lives in a `shared/` directory outside the release tree, symlinked into each release. Deploys never touch the database.
+---
 
-### Excalidraw Bundle
-
-Excalidraw is bundled at build time:
+## The Excalidraw Bundle
 
 ```bash
 npx esbuild app/assets/excalidraw/entry.js \
@@ -150,355 +148,326 @@ npx esbuild app/assets/excalidraw/entry.js \
   --global-name=ExcalidrawBundle
 ```
 
-The entry point exposes `Excalidraw`, `React`, `ReactDOM`, and `exportToBlob` as globals on `window.ExcalidrawBundle`. The output is ~8 MB. It lives in the binary via `//go:embed`.
+~8 MB. Embedded in the binary via `//go:embed`. Your first deploy takes 50 seconds because of this. Subsequent deploys are faster because rsync only sends the parts that changed. But that first deploy? Go make coffee.
 
-### Sharing
+---
 
-`POST /api/draw/{id}/share` generates a 16-byte random hex slug, stores it on the drawing row, and returns it. The share dialog renders a link (`/shared/{slug}`). Anyone with the URL can view the drawing — no auth required. If `allow_public_edits` is enabled, anyone with the link can also draw.
+## Sharing
 
-### Thumbnails
+`POST /api/draw/{id}/share` → 16-byte hex slug → `/shared/{slug}`. Anyone with the URL can view. No account required. If you enable `allow_public_edits`, they can draw too. Yes, that means strangers can draw on your diagram. Yes, that's the point. No, we won't add approval-based access. Go build it yourself.
 
-After every successful save, `exportToBlob` renders a PNG thumbnail of the current canvas. If the blob is under 100 KB, it gets base64-encoded and stored in `drawing_thumbnails`. The dashboard renders these in a grid.
+---
 
-### Tailwind v4 + `.templ` Files
+## Thumbnails
 
-Tailwind v4's `@source` directive doesn't scan `.templ` files by default. Responsive variants like `sm:hidden`, `md:flex`, `lg:grid-cols-3` silently disappear from the output — no warnings, no errors, just broken layouts. The fix is `tools/generate_css/main.go`:
+After every save, `exportToBlob` renders a PNG. If it's under 100 KB, it gets stored in base64. The dashboard shows these in a grid. If your drawing is too complex to fit in 100 KB of PNG, congratulations — you actually drew something meaningful. Your thumbnail is a mystery. Like your career path.
 
-1. Scans all `.templ` files under `app/`
-2. Extracts classes matching responsive/variant patterns
-3. Writes `app/_entry.css` with `@source inline("...")` declarations
-4. Compiles via standalone Tailwind binary → embedded in the binary
+---
 
-### CSS Cache Busting
+## CSS Cache Busting
 
-CSS is served at `/globals.css` with `Cache-Control: public, max-age=31536000, immutable` and an `ETag` of the SHA256 hash. Template links include `?v=<hash>`. When the CSS changes, the hash changes, the URL changes, the CDN fetches a new copy.
-
-### Excalidraw Theming
-
-A brutalist override stylesheet remaps Excalidraw's internal CSS variables to Catppuccin tokens: `border-radius: 0` everywhere, hard offset shadows, 2px borders. The theme toggle syncs with Excalidraw via `api.updateScene({ appState: { theme } })`. A `MutationObserver` on `document.documentElement` propagates class changes to the canvas.
+`/globals.css` served with `Cache-Control: public, max-age=31536000, immutable` and an ETag of the SHA256 hash of the file. Links include `?v=<hash>`. Hash changes → URL changes → browser fetches new copy. This took us three iterations to get right. The first two involved Cloudflare caching stale CSS and wondering why our layout was broken in production.
 
 ---
 
 ## The Load Testing Saga
 
-### Round 1: HTTP Baseline — 1,500 VUs, 94 MB
+### Round 1: HTTP Baseline — 1,500 VUs
 
-k6 test against the live server, simulating solo HTTP dirty-bit saves:
+K6. 1,500 virtual users. 39,756 requests. **0 errors.** Go heap: 15 MB. OS memory: 94 MB. The only bottleneck was Linux's OOM killer at 128 MB.
 
-| Metric | Value |
-|---|---|
-| Max VUs | 1,500 |
-| Total Requests | 39,756 |
-| Error Rate | **0.00%** |
-| p95 latency | 3.23s (SQLite single-writer queueing) |
-| Go Heap Peak | 15.04 MB |
-| OS Memory Peak | 94.1 MB |
-| CPU Peak | ~72.1% of one core |
+**Verdict:** HTTP solo mode is effectively free. The server is a very fast POST acceptor.
 
-The Go binary handled nearly 40,000 authenticated read/write operations from 1,500 concurrent users without dropping a single request or triggering `database is locked`. The bottleneck: the Linux OOM killer at 128 MB.
+### Round 2: Full SCENE_UPDATE + WebSocket — 50 VUs
 
-**Lesson:** HTTP-only solo mode is essentially free. The server acts as a dumb write-ahead log.
-
-### Round 2: Full SCENE_UPDATE — 50 VUs, OOM at 128 MB
-
-Added WebSocket collaboration with full SCENE_UPDATE on every `onChange`. k6 test at 50 VUs in one room:
+We added WebSocket. 50 VUs in one room. Full SCENE_UPDATE on every onChange.
 
 | Metric | Value |
 |---|---|
+| MemoryPeak | **134 MB — CRASHED** |
+| OOMKills | **1** (systemd said no) |
 | ws_errors | 82 (0.68/s) |
-| Sessions | 68 (18 reconnects) |
+| Sessions | 68 (18 reconnects, mostly because the server kept dying) |
 | data_sent | 52 MB |
-| **MemoryPeak** | **134 MB — CRASHED** |
-| **OOMKills** | **1** |
 
-The hub's broadcast loop writing ~50 KB frames to 50 connections filled TCP buffers faster than slow clients drained them. A single `bcast DROP` cascade turned into a chain reaction: one dropped client triggers another `write FAIL`, which triggers more drops, which spawns reconnect goroutines, which spikes memory past 128 MB. systemd kills the process.
+Broadcasting 50 KB frames to 50 connections fills TCP buffers. One slow client → buffer full → DROP → disconnect → reconnect → more goroutines → more memory → systemd says "bye."
 
-**Lesson:** Full SCENE_UPDATE at scale is a slow OOM pump. The write-buffer amplification (1 send × 50 writes) is the killer.
+**Verdict:** Full SCENE_UPDATE at scale is a self-inflicted DDoS.
 
-### Round 3: SCENE_DELTA — 50 VUs, 95.8 MB, Survived
+### Round 3: SCENE_DELTA — 50 VUs
 
-Replaced SCENE_UPDATE with SCENE_DELTA (~1 KB per frame). Added client-side delta reconstruction. Every 10th delta sends a full SCENE_UPDATE to keep the hub's cache fresh. k6 at 50 VUs:
+~1 KB per frame. Client-side delta reconstruction. Every 10th delta sends a full SCENE_UPDATE.
 
 | Metric | Value |
 |---|---|
-| ws_errors | **3 (0.025/s)** ✓ |
-| Sessions | **50 (exactly, zero reconnects)** |
-| data_sent | **7.6 MB** |
-| data_received | 474 MB |
-| ws_msgs_received | 233,124 (1,942/s) |
-| **MemoryPeak** | **95.8 MB** |
-| **OOMKills** | **0** |
+| MemoryPeak | **95.8 MB** (survived!) |
+| ws_errors | **3 (0.025/s)** |
+| Sessions | **50 (0 reconnects)** |
+| data_sent | **7.6 MB** (from 52 MB) |
 
 | Metric | Full SCENE_UPDATE | SCENE_DELTA |
 |---|---|---|
-| MemoryPeak | 134 MB (crashed) | **95.8 MB** |
-| ws_errors | 82 (0.68/s) | **3 (0.025/s)** ✓ |
+| MemoryPeak | 134 MB (kaboom) | **95.8 MB** |
+| ws_errors | 82 (0.68/s) | **3 (0.025/s)** |
 | data_sent | 52 MB | **7.6 MB** |
 | Sessions | 68 (18 reconnects) | **50 (0 reconnects)** |
 
-The delta approach reduced per-frame size by 50× and eliminated the write-buffer cascade. Every VU connected exactly once and stayed.
+**Verdict:** SCENE_DELTA works at scale. But the client code was held together with duct tape and prayer.
 
-**Lesson:** SCENE_DELTA works at scale. But the client-side delta reconstruction (computeDelta → handleRemoteDelta) was fragile. Phantom diffs, stale `_lastSentElements`, race conditions between SCENE_INIT and local state. Not worth the complexity for the typical 2-3 person collaboration session.
+### Round 4: What We Ship — Full SCENE_UPDATE + Lazy Socket
 
-### Round 4: Hybrid Lazy Socket — The Current Architecture
+We deleted SCENE_DELTA. It was too fragile. Phantom diffs. Stale `_lastSentElements`. Race conditions between SCENE_INIT and local state. It passed the load test. It failed in the browser. I hate frontend code.
 
-The bottleneck analysis showed two distinct ceilings:
+We went back to full SCENE_UPDATE. But now it only fires when someone is actually watching. Solo users? HTTP. No WebSocket. No OOM. The theoretical problem of 50 broadcasters in one room is academic when 49 of them don't have a socket open.
 
-| Mode | Ceiling | Cost per user |
-|---|---|---|
-| Solo (HTTP only) | **1,500+ VUs** | ~60 KB (one POST every 3s) |
-| Collaboration (WS) | **~150-200 VUs** | ~1.6 MB (goroutine + buffers + broadcast) |
-
-The Hybrid Lazy Socket combines both: default to HTTP-only (1,500+ VU ceiling), upgrade to WebSocket only when a collaborator is detected via `GET /api/draw/{id}/collab-status` polling. When the last collaborator leaves, downgrade back to HTTP solo.
-
-The delta reconstruction was removed. The current wire protocol sends full SCENE_UPDATE frames (like Round 2) but only when actively collaborating. This is simpler, more reliable, and the bandwidth only matters during collaboration — which is the minority case.
-
-**Final bottleneck:** The per-connection WS cost (~1.6 MB each) means ~150-200 concurrent collaborators before hitting the 128 MB ceiling. In practice, you'll never hit this because most users are solo.
+**Verdict:** The best optimization is not doing the thing at all until you absolutely have to.
 
 ---
 
 ## Route Map
 
-| Method | Path | Handler | Auth | Response |
-|---|---|---|---|---|
-| `GET` | `/` | `app.PageHandler` | No | Templ (landing) |
-| `GET` | `/drawings` | `dashboard.PageHandler` | Yes | Templ |
-| `POST` | `/draw/new` | `dashboard.NewHandler` | Yes | Redirect |
-| `GET` | `/draw/{id}` | `canvas.PageHandler` | Yes | Templ |
-| `GET` | `/profile` | `profile.PageHandler` | Yes | Templ |
-| `GET` | `/api/draw/{id}/data` | `api.DataHandler` | Yes | JSON |
-| `POST` | `/api/draw/{id}/save` | `api.SaveHandler` | Yes | JSON |
-| `POST` | `/api/draw/{id}/share` | `api.ShareHandler` | Yes | JSON |
-| `PUT` | `/api/draw/{id}/rename` | `api.RenameHandler` | Yes | JSON |
-| `POST` | `/api/draw/{id}/thumbnail` | `api.ThumbnailHandler` | Yes | JSON |
-| `DELETE` | `/api/draw/{id}` | `api.DeleteHandler` | Yes | JSON |
-| `GET` | `/shared/{slug}` | `canvas.SharedPageHandler` | No | Templ |
-| `GET` | `/api/shared/{slug}/data` | `api.SharedDataHandler` | No | JSON |
-| `GET` | `/api/draw/{id}/ws` | `api.OwnerWSHandler` | Yes | WS upgrade |
-| `GET` | `/api/shared/{slug}/ws` | `api.GuestWSHandler` | No | WS upgrade |
-| `GET` | `/api/draw/{id}/collab-status` | `api.CollabStatusHandler` | Yes | JSON (`{ online: N }`) |
-| `GET` | `/api/ws/stats` | `api.WsStatsHandler` | No | Plain-text |
-| `POST` | `/auth/login` | `lib.LoginHandler` | No | HX-Redirect |
-| `POST` | `/auth/logout` | `lib.LogoutHandler` | No | HX-Redirect |
-| `GET` | `/auth/user` | `lib.UserHandler` | No | HTML fragment |
+| Method | Path | What it does |
+|---|---|---|
+| `GET` | `/` | Landing page. Look at all those boxes. |
+| `GET` | `/drawings` | Your drawings. Or the void, if you haven't made any. |
+| `POST` | `/draw/new` | Creates a new untitled void for your boxes. |
+| `GET` | `/draw/{id}` | The canvas. Go draw. |
+| `GET` | `/profile` | Your name, email, and existential dread. |
+| `GET` | `/api/draw/{id}/data` | Returns your drawing as JSON. |
+| `POST` | `/api/draw/{id}/save` | Saves your drawing. Try not to call this 500 times. |
+| `POST` | `/api/draw/{id}/share` | Returns a share link so others can witness your genius. |
+| `PUT` | `/api/draw/{id}/rename` | Renames your drawing. "Untitled (42)" wasn't cutting it. |
+| `POST` | `/api/draw/{id}/thumbnail` | Saves a tiny PNG of your drawing. |
+| `DELETE` | `/api/draw/{id}` | Deletes your drawing. Gone. Reduced to atoms. |
+| `GET` | `/shared/{slug}` | View someone else's drawing. Or your own, via a link. |
+| `GET` | `/api/shared/{slug}/data` | Drawing data, no auth needed. Yes, it's public. That's the point. |
+| `GET` | `/api/draw/{id}/ws` | WebSocket for the owner. |
+| `GET` | `/api/shared/{slug}/ws` | WebSocket for guests. |
+| `GET` | `/api/draw/{id}/collab-status` | "Is anyone else here?" Returns `{ online: N }`. |
+| `GET` | `/api/ws/stats` | Hub dump. For when you want to see how many WebSockets are bleeding your RAM. |
+| `POST` | `/auth/login` | Sets a session cookie. |
+| `POST` | `/auth/logout` | Destroys the session cookie. No takebacks. |
+| `GET` | `/auth/user` | Auth bar HTML. |
+| `GET` | `/admin/*` | Admin panel. You can't see it. Don't try. |
 
 ---
 
 ## Project Structure
 
 ```
-main.go                        # Route registration, static serving, server startup
+main.go                        # Where the magic starts. And sometimes ends.
 app/
   lib/
-    auth.go                    # Firebase Admin SDK init, session cookie helpers
-    auth_handlers.go           # Login / logout / user fragment handlers
-    db.go                      # SQLite init, WAL mode, schema migration, checkpoint goroutine
-    middleware.go              # Session verification, RequireAuth wrapper
+    auth.go                    # Firebase nonsense
+    auth_handlers.go           # Login, logout, the usual
+    db.go                      # SQLite + WAL checkpoint goroutine
+    middleware.go               # Session verification + user tracking + RequireSuperAdmin
   api/
-    draw.go                    # Data, Save, Share, Rename, Thumbnail, Delete handlers
-    shared.go                  # Public shared-drawing data handler (no auth)
-    hub.go                     # WS hub: Client/Room structs, connect/disconnect, broadcast, message dispatch
-    ws.go                      # WS upgrade handlers (OwnerWS, GuestWS, CollabStatus), read/write pump loops
+    draw.go                    # REST handlers: save, load, share, rename, delete
+    shared.go                  # Public drawing access (no auth, no problems)
+    hub.go                     # WebSocket rooms, clients, broadcast (the noisy part)
+    ws.go                      # WS upgrade + read/write pumps (the plumbing)
   canvas/
-    page.go                    # Canvas page handler
-    page.templ                 # Excalidraw editor: title bar, bridge JS, dirty-bit autosave + lazy socket
-    shared.go                  # Shared canvas page handler
-    shared.templ               # Read-only Excalidraw view with WS
+    page.go                    # Canvas handler
+    page.templ                 # Excalidraw + dirty-bit + lazy socket JS
+    shared.go                  # Shared canvas handler
+    shared.templ               # Read-only view with WS for live updates
   dashboard/
-    page.go                    # Dashboard handler + NewDrawing handler
-    page.templ                 # Drawing grid, empty state, new drawing button
+    page.go                    # Dashboard + drawing creation
+    page.templ                 # Grid of drawings you forgot existed
   profile/
     page.go                    # Profile handler
-    page.templ                 # User info display
+    page.templ                 # It's you. In text form.
+  admin/
+    page.go                    # All admin handlers (you can't see them)
+    page.templ                 # Admin layout, sidebar, pages (still can't see them)
   components/
-    navigation.templ           # Desktop nav + hamburger menu
-    logo.templ                 # Icon-only on mobile, text on sm:+
-    drawing_card.templ         # Thumbnail card with rename / delete
-    footer.templ               # GOTTH badge + copyright
-    empty_state.templ          # "No drawings yet" CTA
-  layout.templ                 # Root HTML shell (fonts, Firebase SDK, HTMX, PWA meta)
-  canvas_layout.templ          # Minimal shell for canvas pages
-  page.templ                   # Landing page (hero, feature grid, CTA)
-  globals.css                  # Catppuccin tokens, design system, Tailwind directives
-  _entry.css                   # Generated: @source inline() + globals.css (do not hand-edit)
-  _responsive.css              # Manually curated responsive overrides
+    navigation.templ           # The bar at the top
+    logo.templ                 # It's a logo. We made it ourselves.
+    drawing_card.templ         # Thumbnail + rename + delete
+    footer.templ               # Legal boilerplate nobody reads
+    empty_state.templ          # "You have no drawings. Sad." — this component
+  layout.templ                 # The HTML shell. Every page wears it.
+  canvas_layout.templ          # Minimal shell for canvas pages. No footer. No distractions.
+  page.templ                   # Landing page. The first thing you see.
+  page.go                      # Landing page handler. Redirects you if you're logged in.
+  globals.css                  # All the CSS. Catppuccin. Brutalist. Beautiful.
   assets/
     excalidraw/
-      entry.js                 # Excalidraw esbuild entry point
-      package.json             # Pinned: excalidraw 0.18.1, react 18.3.1
+      entry.js                 # The glue that bundles Excalidraw
+      package.json             # Dependency jail
     public/
-      excalidraw.bundle.js     # Built by `make bundle` (~8 MB, embedded in binary)
-      excalidraw.css           # Excalidraw's own CSS (embedded)
-      logo.svg                 # App logo
-      manifest.json            # PWA manifest
-    assets.go                  # //go:embed directives + CSSHash (SHA256)
+      excalidraw.bundle.js     # 8 MB of someone else's code
+      excalidraw.css           # Their styles
+      logo.svg                 # Our logo. It's a circle and some lines.
+      manifest.json            # PWA stuff
+    assets.go                  # //go:embed so the binary isn't lonely
 tools/
-  generate_css/main.go         # Scan .templ → extract responsive classes → _entry.css
-load_tests/
-  k6_ws_test.js                # k6 WebSocket load test script
-  PROFILES.md                  # pprof analysis and comparison
-  SCENE_DELTA-PLAN.md          # SCENE_DELTA implementation plan (archived)
-  POSTMORTEM-2026-07-10.md     # OOM crash analysis (archived)
-  REPORT-2026-07-11.md         # SCENE_DELTA load test report (archived)
+  generate_css/main.go         # Scans .templ files, extracts Tailwind classes, writes _entry.css
 ```
 
 ---
 
 ## Design System
 
-**Catppuccin Brutalist.** Sharp corners, hard offset shadows, Catppuccin palette.
+**Catppuccin Brutalist.** Sharp corners. Hard shadows. If it doesn't have a 2px border, is it even real?
 
-- **Fonts:** Bungee (headings), Space Mono (body/UI/mono)
-- **Borders:** 2px solid. Always.
-- **Shadows:** Hard offset — `2px 2px`, `4px 4px`, `6px 6px`, `8px 8px`. No blur. No spread.
-- **Radius:** Zero. No exceptions.
-- **Buttons:** Translate on active (`translate-x-0.5 translate-y-0.5`), shadow collapses to zero.
-- **Grid:** Subtle colored grid lines (pink/blue in light mode, mauve/lavender in dark).
-- **Dark mode:** Defaults to system preference. Toggle persists to `localStorage`.
+- **Fonts:** Bungee (loud), Space Mono (everything else)
+- **Borders:** 2px. Minimum. 1px borders are for people who don't respect themselves.
+- **Shadows:** Hard offset, zero blur. `shadow-[2px_2px_0px_0px_var(--accent)]` or death.
+- **Border radius:** 0. Nothing is round. Not even the buttons. Especially not the buttons.
+- **Buttons:** On click they translate and the shadow disappears. Like they're pressing into the screen. It feels satisfying. Try it.
+- **Dark mode:** Follows system preference. Toggle persists to localStorage because we know you change it every 20 minutes depending on which part of the room the sun is hitting.
 
 ### Color Tokens
 
-| Token | Latte (Light) | Mocha (Dark) | Usage |
+| Token | Light (Latte) | Dark (Mocha) | Jobs |
 |---|---|---|---|
-| `--bg` | `#eff1f5` | `#1e1e2e` | Page background |
-| `--fg` | `#4c4f69` | `#cdd6f4` | Body text |
-| `--fg-muted` | `#8c8fa1` | `#6c7086` | Secondary text |
-| `--bg-subtle` | `#e6e9ef` | `#181825` | Card backgrounds |
-| `--border` | `#4c4f69` | `#cdd6f4` | All borders |
-| `--accent` | `#8839ef` | `#cba6f7` | Primary actions, focus rings |
-| `--mauve` | `#8839ef` | `#cba6f7` | Secondary accent |
-| `--pink` | `#ea76cb` | `#f5c2e7` | Feature cards, hover states |
-| `--peach` | `#fe640b` | `#fab387` | Accent borders |
-| `--teal` | `#179299` | `#94e2d5` | Feature cards |
-| `--blue` | `#1e66f5` | `#89b4fa` | Grid lines, links |
-| `--lavender` | `#7287fd` | `#b4befe` | Grid lines, secondary |
+| `--bg` | `#eff1f5` | `#1e1e2e` | Background. The canvas upon which we paint. |
+| `--fg` | `#4c4f69` | `#cdd6f4` | Text. Read it. |
+| `--fg-muted` | `#8c8fa1` | `#6c7086` | Text that isn't important. Like this sentence. |
+| `--bg-subtle` | `#e6e9ef` | `#181825` | Slightly different background. For cards. And the admin sidebar. |
+| `--border` | `#4c4f69` | `#cdd6f4` | Lines that separate things. Like the line between you and productivity. |
+| `--accent` | `#8839ef` | `#cba6f7` | Primary purple. Buttons, links, active nav items. |
+| `--mauve` | `#8839ef` | `#cba6f7` | Secondary purple. For when one purple wasn't enough. |
+| `--pink` | `#ea76cb` | `#f5c2e7` | Pink. Feature cards, hover states, the "revoke" button on the VIP page. |
+| `--peach` | `#fe640b` | `#fab387` | Orange. Accent borders and the Minecraft-style splash text. |
+| `--teal` | `#179299` | `#94e2d5` | Teal. Feature cards, "shared" badge, the third step in "how it works." |
+| `--blue` | `#1e66f5` | `#89b4fa` | Blue. Grid lines, links, step 2. |
+| `--lavender` | `#7287fd` | `#b4befe` | Lavender. Grid lines on the landing page and secondary accent. |
 
 ---
 
 ## Deployment
 
-Ships as a single binary to a bare-metal VPS via atomic symlink swap. Zero downtime.
+Ships as a single binary. Deployed via atomic symlink swap. Zero downtime, unless you break the symlink, in which case: downtime.
 
 ```bash
 bash deploy.sh
 ```
 
-### What `deploy.sh` Does
+### What Happens When You Run deploy.sh
 
 1. **Local build:** `make css && make templ && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build`
-2. **rsync:** Binary + Firebase service account JSON + server-side `Makefile.server` → timestamped release dir on the server
-3. **Atomic swap:** `ln -nfs` points `current/` → new release directory
-4. **Symlink DB:** `canvas.db` in `shared/` is symlinked into each release — database never touched by a deploy
-5. **Restart:** `systemctl restart udin-canvas`
-6. **Cleanup:** Old releases archived to `.tar.xz`, keeping the last 5
+2. **Rsync:** Binary + Firebase credentials + server Makefile → timestamped folder on the server
+3. **Atomic swap:** `ln -nfs current/` → new release. Users see zero interruption, unless they're in the middle of saving, in which case they lose 3 seconds of work maximum. We call that "acceptable."
+4. **Symlink DB:** `canvas.db` lives in `shared/`. Deploys never touch it. Your drawings survive. We're not monsters.
+5. **Restart:** `systemctl restart udin-canvas`. Server goes down for ~500ms. Browser retries. Nobody notices.
+6. **Cleanup:** Old releases archived to `.tar.xz`. Last 5 kept. The rest? Gone. History. Reduced to atoms.
 
-Binary is ~61 MB (Excalidraw bundle embedded). Deploy takes ~50 seconds.
+Binary is ~61 MB. Deploy takes ~50 seconds. That's 50 seconds of your life you'll never get back. Use them wisely.
 
 ### Server Setup
 
-| Concern | Solution |
+| Problem | How we fixed it |
 |---|---|
-| Reverse proxy | Caddy → app port |
-| Process manager | systemd unit with `MemoryMax=128M` |
-| Database | Shared SQLite file, persists via symlinks |
-| CDN | Cloudflare (aggressive caching; purge on CSS change) |
-| Peak memory | ~16 MB solo (HTTP), ~96 MB for 50 WS collaborators |
+| Reverse proxy | Caddy → Go app. Caddy handles TLS. We handle boxes. |
+| Process supervision | systemd. `MemoryMax=128M`. If it goes over, it dies. That's not a bug, it's a feature. |
+| Database persistence | Symlinked SQLite outside the release tree. |
+| CDN | Cloudflare. Aggressive caching. We purge on CSS changes because Cloudflare once served a 3-day-old stylesheet and we didn't notice for 3 days. |
+| Memory at rest | ~16 MB. |
+| Memory under 50 WS users | ~96 MB. |
+| Memory at death | ~128 MB. |
 
 ### Environment Variables
 
-| Variable | Required | Default | Description |
+| Variable | Required | Default | What it does |
 |---|---|---|---|
-| `PORT` | No | `3000` | HTTP listen port |
-| `SQLITE_DB_PATH` | No | `./canvas.db` | Path to SQLite database file |
+| `PORT` | No | `3000` | The port. Defaults to 3000. Change it if you want. Or don't. I'm not your manager. |
+| `SQLITE_DB_PATH` | No | `./canvas.db` | Where the database lives. Don't move it while the server is running unless you want corrupted data. You've been warned. |
 
-Firebase service account: auto-detected by scanning for `*-firebase-adminsdk-*.json` in the working directory.
+Firebase service account is auto-detected by scanning for `*-firebase-adminsdk-*.json` in the working directory. We're not making you set 50 environment variables. We're not that kind of project.
 
 ---
 
 ## The Suffering Log
 
-Things that went wrong, in roughly chronological order.
+Every stupid thing that broke, in something approaching chronological order.
 
-1. **Firestore → SQLite** — Moved from a managed service to a single file. Rewrote every query handler. Worth it.
+1. **Firestore → SQLite.** We moved from a managed cloud database to a single file. Rewrote every query. The app got faster. The ops burden went to zero. Best decision we ever made. Took a weekend.
 
-2. **Login/logout routing** — The logout form had `hx-boost="false"` which silently swallowed the `HX-Redirect` header. Removed it. Fixed.
+2. **Login/logout routing.** The logout form had `hx-boost="false"` which is apparently the HTMX equivalent of "this form is legally dead." The `HX-Redirect` header was being emitted into the void. Removed `hx-boost="false"`. Everything worked. Wasted 2 hours.
 
-3. **Excalidraw canvas font** — `body { font-family: 'Space Mono' }` in `globals.css` leaked into Excalidraw's canvas text input. Added a reset in `excalidraw-brutalist.css` targeting `.excalidraw .text-editor`. Partially fixed.
+3. **Excalidraw canvas font.** `body { font-family: 'Space Mono' }` leaked into Excalidraw's text input. Every text node looked like a Linux terminal. Added a CSS reset for `.excalidraw .text-editor`. It mostly works now. Mostly.
 
-4. **Tailwind v4 responsive classes silently disappearing** — `sm:hidden`, `md:flex`, `lg:grid-cols-3` were all missing from CSS output. No warnings. No errors. Just broken layouts. Built a Go tool to scan `.templ` files and inject them via `@source inline()`.
+4. **Tailwind v4 responsive classes silently disappeared.** `sm:hidden`, `md:flex`, `lg:grid-cols-3` — all of them, gone. No warning. No error. Just a broken mobile layout in production. Tailwind v4's `@source` directive doesn't scan `.templ` files. We built a Go tool that scans them and injects the classes into an `@source inline()` call. This is a workaround for something that shouldn't be broken in the first place.
 
-5. **Cloudflare caching stale CSS** — `Cache-Control: no-cache` was being overwritten by Cloudflare. Switched to content-hashed URLs with `immutable`. Purge on deploy anyway.
+5. **Cloudflare cached a 3-day-old CSS file.** `Cache-Control: no-cache` was a suggestion, not a rule. Switched to content-hashed URLs with `immutable`. Now when CSS changes, the URL changes, and Cloudflare has no choice but to fetch the new one. We still purge on deploy because we have trust issues.
 
-6. **Auth bar OOB swap** — `UserHandler` returns HTML for both `#auth-bar` (desktop) and `#auth-bar-mobile` (mobile) with `hx-swap-oob="true"`. Required restructuring the handler to return both elements in a single response.
+6. **Auth bar required an OOB swap.** The desktop nav has `#auth-bar`. The mobile nav has `#auth-bar-mobile`. They both need to update when the user logs in. HTMX handles this with `hx-swap-oob="true"`. The handler has to return both elements in a single response. Works great now. Took entirely too long to figure out.
 
-7. **Autosave race on tab close** — The `setTimeout` debounce reset on every `onChange` event. User closes tab within the 2-second window → final `fetch` never fires → stale data on reopen. Replaced with dirty-bit + `setInterval` + `sendBeacon` on `beforeunload`.
+7. **Autosave race on tab close.** The debounce timer reset on every `onChange`. If you changed something and immediately closed the tab, the save never fired because the debounce timer was waiting. Maximum data loss: infinite. Replaced with dirty-bit + `setInterval` + `sendBeacon` on `beforeunload`. Maximum data loss: 3 seconds. Acceptable.
 
-8. **`canvas.db-wal` grew to 4.2 MB** — SQLite's auto-checkpoint threshold is 1000 pages. Without explicit checkpointing, the WAL accumulates between server restarts. Fixed with `PRAGMA wal_checkpoint(PASSIVE)` on a 5-minute ticker.
+8. **WAL file grew to 4.2 GB.** SQLite's WAL auto-checkpoints at 1000 pages by default. If your server runs for weeks between restarts (like ours does), the WAL file accumulates until `df -h` says `Use% 100%`. Added a background goroutine that runs `PRAGMA wal_checkpoint(PASSIVE)` every 5 minutes. Fixed. Don't ask why this isn't the default.
 
-9. **WebSocket `socket.readyState` is undefined in k6** — k6 v2.1.0's Socket object does not expose `readyState`; the guard `if (socket.readyState === 1)` silently blocked all SCENE_UPDATE sends during the first WS load test. Root cause of 0 SCENE_UPDATE in the first run. Removed the guard entirely.
+9. **WebSocket `socket.readyState` is undefined in k6.** Of course it is. k6 v2.1.0's Socket object doesn't expose `readyState`. The guard `if (socket.readyState === 1)` silently blocked every SCENE_UPDATE send during the first load test. Zero updates sent. Load test looked amazing until we realized nothing was happening. Removed the guard. Problem solved. Trust issues: acquired.
 
-10. **WebSocket OOM at 128 MB with full SCENE_UPDATE** — The hub's broadcast loop writing ~50 KB SCENE_UPDATE frames to 50 connections filled TCP buffers faster than slow clients drained them, cascading into OOM. The broadcast fan-out (1 send → 50 writes) amplified a single slow client into a chain reaction: DROP → write FAIL → reconnect → more goroutines → memory spike → systemd kill. Switched to SCENE_DELTA (~1 KB per frame), which eliminated the buffer cascade.
+10. **OOM at 128 MB with full SCENE_UPDATE.** Broadcasting 50 KB frames to 50 connections fills TCP buffers faster than a slow client can drain them. One slow client → buffer full → DROP → disconnect → reconnect → more goroutines → more memory → OOM → systemd: "lol bye." The cascade is beautiful in retrospect. Horrifying in production.
 
-11. **SCENE_DELTA frontend missing `_sceneElements` update** — `handleRemoteScene` updated Excalidraw via `api.updateScene` but didn't sync `_sceneElements`. The next `computeDelta` computed against stale elements, sending phantom diffs of the entire scene. Fixed by syncing `_sceneElements` after every remote update.
+11. **SCENE_DELTA phantom diffs because `_sceneElements` wasn't updated.** `handleRemoteScene` called `api.updateScene()` but didn't update `_sceneElements`. Next `computeDelta` computed against stale elements. Sent the entire scene as a "delta." Delta size: 50 KB. Congratulations, you just invented full SCENE_UPDATE with extra steps.
 
-12. **SCENE_DELTA client-side reconstruction was fundamentally fragile** — The delta approach worked at scale (50 VUs, 95.8 MB, zero reconnects), but the client code was a nest of race conditions. `computeDelta` vs `_lastSentElements`, `handleRemoteDelta` vs `_sceneElements`, SCENE_INIT overwriting local state during handshake. The complexity wasn't worth it for the 2-3 person collaboration session that is 99% of real usage. Reverted to full SCENE_UPDATE, backed by the lazy socket to keep solo users on the HTTP-only path.
+12. **SCENE_DELTA was too fragile to live.** The delta approach survived the load test. It did not survive real users. Phantom diffs. Stale caches. Race conditions between SCENE_INIT and local state. We deleted it. Full SCENE_UPDATE is simpler and works with 2-3 users. The OOM problem at 50 broadcasters doesn't happen with the lazy socket because most users don't have a socket open. Problem avoided, not solved. Still counts.
+
+13. **There will be more bugs.** We know this. You know this. The only question is which one you'll find first.
 
 ---
 
 ## Getting Started
 
-**Prerequisites:** Go 1.22+, Node.js (for the esbuild bundle step), `gcc` (for CGO/SQLite).
+Prerequisites: Go 1.22+, Node.js (for esbuild), `gcc` (for CGO/SQLite).
 
 ```bash
-make setup   # installs templ, air, standalone tailwind binary; runs npm install
-make dev     # css watch + air live-reload server on :3000
+make setup   # Installs templ, air, standalone Tailwind, npm install
+make dev     # CSS watch + Air live-reload on :3000
 ```
 
-Or bare minimum, if the Excalidraw bundle and CSS already exist:
+Or if you're impatient and the Excalidraw bundle already exists:
 
 ```bash
 go run .
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Sign in with Google. Create a drawing. It saves automatically.
+Open `http://localhost:3000`. Sign in with Google. Make a drawing. It saves automatically. If something breaks, check The Suffering Log above. Your problem is probably there.
 
-> **CGO note:** `mattn/go-sqlite3` requires `CGO_ENABLED=1`. On macOS it works out of the box. On Linux, `gcc` must be installed. The deploy script cross-compiles with `CGO_ENABLED=1 GOOS=linux GOARCH=amd64`.
+> **CGO note:** SQLite requires `CGO_ENABLED=1`. macOS: works out of the box. Linux: install `gcc`. Windows: good luck. The deploy script cross-compiles from macOS/Linux to the Linux server. We don't test on Windows. If you get it working on Windows, open a PR. We'll merge it. Eventually.
 
 ### Make Targets
 
 | Target | What it does |
 |---|---|
-| `make setup` | Install `templ`, `air`, download standalone Tailwind binary, run `npm install`, generate templ files |
-| `make dev` | Compile CSS, start Tailwind watcher + Air live-reload server |
-| `make templ` | Re-generate `*_templ.go` from `.templ` files |
-| `make css` | Run `generate-css` then compile Tailwind → `app/assets/globals.css.output` |
-| `make generate-css` | Scan `.templ` files, extract responsive classes, write `app/_entry.css` |
-| `make bundle` | esbuild Excalidraw entry → `app/assets/public/excalidraw.bundle.js` |
-| `make build` | Full production build: css + templ + bundle + `go build` |
+| `make setup` | Downloads the entire internet (templ, air, Tailwind, npm packages). Go make coffee. |
+| `make dev` | Compiles CSS, starts watcher, starts Air. Saves you from manually restarting the server. |
+| `make templ` | Regenerates Go code from `.templ` files. Run this if you edit a template. |
+| `make css` | Scans `.templ` for classes, compiles Tailwind. We have a custom tool for this because Tailwind v4. |
+| `make generate-css` | Just the scanning part. For when you need to debug missing classes. Again. |
+| `make bundle` | esbuilds Excalidraw. Takes 30 seconds. Makes the binary 8 MB fatter. |
+| `make build` | Everything above + `go build`. The full pipeline. The complete experience. |
 
 ---
 
-## Why Not Just Use Excalidraw's Built-In Save?
+## Why Not Use Excalidraw's Built-In Save?
 
-Excalidraw has a "save to disk" button. That works fine for personal use. It doesn't work for "I want to open this diagram on a different machine without emailing myself a JSON file."
+Excalidraw has a "save to disk" button. It saves a `.excalidraw` file to your Downloads folder. If you use one computer forever and never want to open your diagrams anywhere else, that's fine.
 
-SQLite is simpler than any managed database. No indexes to manage, no billing surprises, no document size limits. A single `canvas.db` file. Backed up with `cp`.
+If you want to draw on your laptop, open it on your desktop, and share it with someone without emailing a file, you need a server. That's us.
+
+SQLite is less work than any managed database. No connection strings. No "provisioning." No "your free tier has expired." It's a file. Back it up with `cp`. Restore it with `cp`. Deploy it with `rsync`. It's a file.
 
 ---
 
 ## The Accidental React
 
-We started this project specifically to **avoid React**. HTMX's server-rendered fragments were supposed to handle everything. And they did — for auth, navigation, the dashboard, profile pages, every "normal" web thing.
+We started this project specifically to avoid React. That was the goal. "HTMX can handle everything." And it did — for auth, navigation, the dashboard, profile pages, everything a normal website needs.
 
-But a canvas isn't a normal web thing.
+Then we got to the canvas.
 
-Excalidraw ships as a React component. You can't render it with HTMX. You can't sprinkle it with `hx-trigger`. You have to mount a React root, hand it props, and wire up the `excalidrawAPI` callback. The inline `<script>` block in `page.templ` grew from 10 lines of glue code to 200+ lines managing WebSocket state, dirty-bit autosave, collaborator detection, and scene reconciliation.
+Excalidraw is a React component. You can't HTMX your way into an infinite canvas. You can't `hx-trigger="load"` your way around mounting a React root. You have to write React. There's no shortcut.
 
-We tried to be clever. We built a delta protocol to save bandwidth. We wrote `computeDelta`, `handleRemoteDelta`, `_lastSentElements`, `_deltaCount`. We debugged phantom diffs, stale caches, and race conditions between SCENE_INIT and local state. It worked on the load tester. It broke in the browser.
+The inline `<script>` block in `page.templ` started at 10 lines. It's now 200 lines managing WebSocket state, dirty-bit autosave, collaborator detection, and scene reconciliation. We tried to be clever. We built a delta protocol. We debugged phantom diffs at 2 AM. We used words like "reconciliation" and "version vector" in casual conversation. We were insufferable.
 
-In the end, we deleted all of it. The current code sends the full scene on every change — the same approach we started with, before the OOM crash convinced us we needed something smarter. The difference is the lazy socket: solo users never open a WebSocket, so the full-scene broadcast only affects the 2-3 people actually collaborating. The OOM problem at 50 broadcasters is academic when 49 of those users don't have a socket open.
+We deleted all of it. The current code sends a full SCENE_UPDATE on every change. It's dumb. It works. The lazy socket ensures the dumb part only affects the 2-3 people actively collaborating. Everyone else stays on HTTP and never knows the difference.
 
-**We started not wanting to do React, we ended up doing React, in its intended way.** The React root renders Excalidraw. The inline script handles the bridge logic. HTMX handles everything else. Each tool does what it's good at.
+**We started not wanting to do React, we ended up doing React, in its intended way.** The React root renders Excalidraw. The inline script handles the bridge logic. HTMX handles everything else. Each tool does what it's good at. It just took us 2,000 lines of deleted delta code to figure that out.
 
 ---
 
@@ -506,8 +475,10 @@ In the end, we deleted all of it. The current code sends the full scene on every
 
 **WTFPL — Do What the Fuck You Want To Public License.**
 
-Copy the code. Sell it. Put your name on it. Light your server on fire with it. I don't care. The author is not responsible for anything that happens as a result of using this software, including but not limited to: database corruption, emotional damage from debugging WebSocket cascades, or your boss asking why the architecture diagram looks like a plate of spaghetti.
+This is free software. Go absolutely berserk.
 
-This is free software. Go nuts.
+Copy it. Fork it. Sell it. Put your name on it. Deploy it to a $5 VPS and charge people $50/month for access. Set your server on fire with it — I don't care, I'm not your sysadmin. The author is not responsible for anything that happens as a result of using this software, including but not limited to: database corruption, emotional damage from debugging WebSocket cascades, your boss asking why your architecture diagram looks like a plate of spaghetti, the realization that you cloned a GitHub repo at 11 PM on a Tuesday instead of sleeping, or the slow creeping dread that comes from maintaining a project long after the initial enthusiasm has faded.
+
+It's free. You get what you pay for.
 
 *Excalidraw is separately licensed under MIT — see NOTICE.*
