@@ -114,6 +114,7 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 				var _username = sessionStorage.getItem('collab_username') || null;
 
 				var _lastNetworkVersion = 0;
+				var _networkLockTime = 0;
 
 				var _pendingBroadcast = null;
 				var _broadcastScheduled = false;
@@ -141,6 +142,7 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 							var payload = JSON.parse(event.data);
 							if (payload.type === 'update' && _api && payload.elements) {
 								_lastNetworkVersion = window.ExcalidrawBundle.getSceneVersion(payload.elements);
+								_networkLockTime = Date.now();
 								_api.updateScene({ elements: payload.elements });
 							} else if (payload.type === 'pointer' && payload.clientId && payload.clientId !== _clientId) {
 								_collaborators.set(payload.clientId, {
@@ -207,8 +209,7 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 
 				if (allowPublicEdits) {
 					excalidrawProps.onChange = function(elements, appState) {
-						var currentVersion = window.ExcalidrawBundle.getSceneVersion(elements);
-						if (currentVersion === _lastNetworkVersion) {
+						if (Date.now() - _networkLockTime < 250) {
 							return; // Network echo — drop silently
 						}
 						

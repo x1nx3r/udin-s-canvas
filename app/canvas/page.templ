@@ -132,6 +132,7 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 					var _collaborators = new Map();
 
 					var _lastNetworkVersion = 0;
+					var _networkLockTime = 0;
 
 					var _pendingBroadcast = null;
 					var _broadcastScheduled = false;
@@ -159,6 +160,7 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 								var payload = JSON.parse(event.data);
 								if (payload.type === 'update' && payload.elements) {
 									_lastNetworkVersion = window.ExcalidrawBundle.getSceneVersion(payload.elements);
+									_networkLockTime = Date.now();
 									window.excalidrawAPI.updateScene({ elements: payload.elements });
 								} else if (payload.type === 'pointer' && payload.clientId) {
 									_collaborators.set(payload.clientId, {
@@ -198,8 +200,7 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 							_scene = { elements: elements, appState: appState };
 							_dirty = true;
 							
-							var currentVersion = window.ExcalidrawBundle.getSceneVersion(elements);
-							if (currentVersion === _lastNetworkVersion) {
+							if (Date.now() - _networkLockTime < 250) {
 								return; // Network echo — drop silently
 							}
 							
