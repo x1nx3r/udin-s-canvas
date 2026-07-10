@@ -103,8 +103,6 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 				var allowPublicEdits = mount.dataset.allowPublicEdits === 'true';
 
 				var _api = null;
-				// CRDT-style loop guard: tracks the highest known version of each element.
-				var _knownVersions = new Map();
 				var _collaborators = new Map();
 
 				// Identity: persisted across page reloads within the same browser session.
@@ -115,23 +113,36 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 				}
 				var _username = sessionStorage.getItem('collab_username') || null;
 
-				// rAF throttle: accumulate onChange calls within one frame,
-				// send only the latest state once per animation frame (~60fps).
-				var _pendingBroadcast = null;
-				var _broadcastScheduled = false;
-				function scheduleBroadcast(elements) {
-					_pendingBroadcast = elements;
-					if (!_broadcastScheduled) {
-						_broadcastScheduled = true;
-						requestAnimationFrame(function() {
-							_broadcastScheduled = false;
-							if (_pendingBroadcast && _ws && _ws.readyState === WebSocket.OPEN && _username) {
-								_ws.send(JSON.stringify({ type: 'update', elements: _pendingBroadcast }));
-							}
-							_pendingBroadcast = null;
-						});
-					}
+				// Game Loop Architecture: Decouple networking from React's async onChange
+				var _lastBroadcastHash = '';
+				var _lastNetworkHash = '';
+				var _networkLockTime = 0;
+
+				function getHash(elements) {
+					if (!elements || !elements.length) return '';
+					return elements.map(function(el) {
+						return el.id + ':' + el.version;
+					}).sort().join(',');
 				}
+
+				// Fixed 20fps tick for network syncing
+				setInterval(function() {
+					if (!_api || !_ws || _ws.readyState !== WebSocket.OPEN || !_username) return;
+					// Give React's async batched update 100ms to apply network patches
+					// before we sample the state again, avoiding stale read races.
+					if (Date.now() - _networkLockTime < 100) return;
+
+					var elements = _api.getSceneElements();
+					var currentHash = getHash(elements);
+
+					if (currentHash === _lastBroadcastHash || currentHash === _lastNetworkHash) {
+						return; // No local changes
+					}
+
+					// Genuine local change (or normalized echo) — broadcast it
+					_lastBroadcastHash = currentHash;
+					_ws.send(JSON.stringify({ type: 'update', elements: elements }));
+				}, 50);
 
 				// WebSocket with randomized backoff reconnect (thundering herd protection).
 				var _ws = null;
@@ -142,13 +153,8 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 						try {
 							var payload = JSON.parse(event.data);
 							if (payload.type === 'update' && _api && payload.elements) {
-								// Track incoming versions so onChange knows these aren't local changes.
-								payload.elements.forEach(function(el) {
-									var known = _knownVersions.get(el.id) || 0;
-									if (el.version > known) {
-										_knownVersions.set(el.id, el.version);
-									}
-								});
+								_lastNetworkHash = getHash(payload.elements);
+								_networkLockTime = Date.now();
 								_api.updateScene({ elements: payload.elements });
 							} else if (payload.type === 'pointer' && payload.clientId && payload.clientId !== _clientId) {
 								_collaborators.set(payload.clientId, {
@@ -215,25 +221,7 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 
 				if (allowPublicEdits) {
 					excalidrawProps.onChange = function(elements, appState) {
-						// Elegant loop guard: deep compare element versions.
-						// Only broadcast if at least one element has a strictly higher
-						// version than what we've previously seen (from network or local).
-						var hasLocalChanges = false;
-						for (var i = 0; i < elements.length; i++) {
-							var el = elements[i];
-							var known = _knownVersions.get(el.id) || 0;
-							if (el.version > known) {
-								hasLocalChanges = true;
-								_knownVersions.set(el.id, el.version);
-							}
-						}
-
-						if (!hasLocalChanges) {
-							return; // Network echo or no-op — drop silently
-						}
-
-						// Genuine local change — throttle and broadcast to the hub.
-						scheduleBroadcast(elements);
+						// Only used to trigger autosave in page.templ; shared.templ relies on owner
 					};
 
 					excalidrawProps.onPointerUpdate = function(payload) {
