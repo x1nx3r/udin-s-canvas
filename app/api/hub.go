@@ -90,6 +90,16 @@ func (r *Room) snapshot() (int, int64, time.Duration) {
 	return len(r.clients), r.msgCount, time.Since(r.createdAt)
 }
 
+func (r *Room) pingClient(conn *websocket.Conn) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.clients[conn] {
+		return fmt.Errorf("client gone")
+	}
+	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	return conn.WriteMessage(websocket.PingMessage, nil)
+}
+
 func (r *Room) empty() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()

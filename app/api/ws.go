@@ -116,8 +116,7 @@ func serveWS(w http.ResponseWriter, r *http.Request, roomKey string) {
 				return
 			case <-ticker.C:
 				log.Printf("[ws]  ping   room=%s remote=%s", roomKey, conn.RemoteAddr())
-				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				if err := room.pingClient(conn); err != nil {
 					log.Printf("[ws]  ping  FAIL room=%s remote=%s err=%v", roomKey, conn.RemoteAddr(), err)
 					return
 				}
