@@ -36,3 +36,5 @@ canvas.db-wal
 
 # Build-time dependencies
 app/assets/excalidraw/node_modules/
+profiles*/
+cookie.txt

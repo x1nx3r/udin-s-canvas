@@ -70,9 +70,10 @@ func main() {
 	mux.Handle("POST /api/draw/{id}/thumbnail", lib.RequireAuth(api.ThumbnailHandler))
 	mux.Handle("DELETE /api/draw/{id}", lib.RequireAuth(api.DeleteHandler))
 
-	// Shared (public)
 	mux.HandleFunc("GET /shared/{slug}", canvas.SharedPageHandler)
 	mux.HandleFunc("GET /api/shared/{slug}/data", api.SharedDataHandler)
+
+
 
 	// Middleware
 	wrapped := lib.Middleware(mux)
