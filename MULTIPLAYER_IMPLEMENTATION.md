@@ -38,6 +38,10 @@ This document outlines the step-by-step phased execution plan to transform IMPHI
    - When a byte slice (JSON payload) is received from a client, the server acquires the room's Mutex, iterates over the connections map, and executes `conn.WriteMessage()` to all clients *except* the sender.
    - Ensure `defer conn.Close()` and proper removal from the `Hub` when a connection drops.
 
+4. **Connection Security & Lifecycles (The OOM & Leak Guards):**
+   - **The Malicious Payload OOM Fix:** Immediately enforce `conn.SetReadLimit(1024 * 512)` (512 KB). This prevents a malicious user from sending a 50MB string over the socket and instantly triggering the systemd OOM killer.
+   - **The Laptop-Lid Memory Leak Fix:** Implement a Ping/Pong heartbeat loop. Set `conn.SetReadDeadline(time.Now().Add(60 * time.Second))`. The server must ping clients every 30 seconds; if a client drops offline silently (e.g. laptop lid closed), the read deadline trips, the loop safely panics, and the dead connection is purged from the Hub's RAM.
+
 ---
 
 ## Phase 3: The Passive Client (Live Presentation)
@@ -68,9 +72,14 @@ This document outlines the step-by-step phased execution plan to transform IMPHI
    - In the Excalidraw `onChange` hook, deeply compare the local elements against the known network state. If the versions haven't incremented, abort the broadcast.
 
 3. **Broadcasting & Dirty-Bit Overlap:**
-   - If the `onChange` hook determines the change is genuinely local, execute `ws.send(JSON.stringify({ elements }))`.
+   - If the `onChange` hook determines the change is genuinely local, execute `ws.send(JSON.stringify({ type: "update", elements }))`.
    - Set `_dirty = true` to arm the local 3-second autosave interval.
    - **Crucial Verification:** Ensure that users receiving `onmessage` updates do *not* have their `_dirty` flags set, preventing them from hammering the SQLite database with redundant saves.
+
+4. **Multiplayer Presence (Live Cursors):**
+   - To make the collaboration feel "alive", we must also capture ephemeral cursor data.
+   - In `onPointerUpdate`, capture `pointer: { x, y }` and broadcast a `{ type: "pointer", pointer }` payload via the WebSocket.
+   - On the receiving end, inject this pointer data using `api.updateScene({ collaborators: newMap })` to render other users' cursors flying around the screen.
 
 ---
 
