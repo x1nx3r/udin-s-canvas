@@ -131,7 +131,6 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 					var _scene = null;
 					var _collaborators = new Map();
 
-					var _lastNetworkVersion = 0;
 					var _networkLockTime = 0;
 
 					var _pendingBroadcast = null;
@@ -159,7 +158,6 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 							try {
 								var payload = JSON.parse(event.data);
 								if (payload.type === 'update' && payload.elements) {
-									_lastNetworkVersion = window.ExcalidrawBundle.getSceneVersion(payload.elements);
 									_networkLockTime = Date.now();
 									window.excalidrawAPI.updateScene({ elements: payload.elements });
 								} else if (payload.type === 'pointer' && payload.clientId) {

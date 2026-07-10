@@ -113,7 +113,6 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 				}
 				var _username = sessionStorage.getItem('collab_username') || null;
 
-				var _lastNetworkVersion = 0;
 				var _networkLockTime = 0;
 
 				var _pendingBroadcast = null;
@@ -141,7 +140,6 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 						try {
 							var payload = JSON.parse(event.data);
 							if (payload.type === 'update' && _api && payload.elements) {
-								_lastNetworkVersion = window.ExcalidrawBundle.getSceneVersion(payload.elements);
 								_networkLockTime = Date.now();
 								_api.updateScene({ elements: payload.elements });
 							} else if (payload.type === 'pointer' && payload.clientId && payload.clientId !== _clientId) {
