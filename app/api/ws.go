@@ -45,8 +45,9 @@ func OwnerWSHandler(w http.ResponseWriter, r *http.Request) {
 	serveWS(w, r, "draw:"+id)
 }
 
-// GuestWSHandler handles anonymous WebSocket connections from users with a share link.
-// Guests are only admitted if allow_public_edits is true for the drawing.
+// GuestWSHandler handles WebSocket connections from users with a share link.
+// Any valid shared drawing can connect to receive live updates (live presentation).
+// Active edit broadcasting is enforced client-side via the allow_public_edits flag.
 // Route: GET /api/shared/{slug}/ws
 func GuestWSHandler(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
@@ -54,16 +55,10 @@ func GuestWSHandler(w http.ResponseWriter, r *http.Request) {
 	// Resolve the slug to the canonical drawing ID so guests and the owner
 	// share the same hub room (keyed by "draw:"+id).
 	var drawingID string
-	var allowPublicEdits int
 	err := lib.DB.QueryRowContext(r.Context(),
-		`SELECT id, allow_public_edits FROM drawings WHERE share_slug = ?`, slug,
-	).Scan(&drawingID, &allowPublicEdits)
+		`SELECT id FROM drawings WHERE share_slug = ?`, slug,
+	).Scan(&drawingID)
 	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	if allowPublicEdits == 0 {
-		// Room is in view-only mode; no write socket needed.
 		http.NotFound(w, r)
 		return
 	}

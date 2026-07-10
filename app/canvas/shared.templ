@@ -28,17 +28,43 @@ templ SharedPage(title string, slug string) {
 				var React = window.ExcalidrawBundle.React;
 				var ReactDOM = window.ExcalidrawBundle.ReactDOM;
 				var Excalidraw = window.ExcalidrawBundle.Excalidraw;
+
+				// Hoisted so the WS handler can reach it before Excalidraw finishes mounting.
+				var _api = null;
+
+				// WebSocket — passive receiver (live presentation mode).
+				// Reconnects with randomized backoff to prevent thundering herd on server restart.
+				var _ws = null;
+				function connectWS() {
+					var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+					_ws = new WebSocket(proto + '//' + location.host + '/api/shared/' + slug + '/ws');
+					_ws.onmessage = function(event) {
+						try {
+							var payload = JSON.parse(event.data);
+							if (payload.type === 'update' && _api && payload.elements) {
+								_api.updateScene({ elements: payload.elements });
+							}
+						} catch(e) {}
+					};
+					_ws.onclose = function() {
+						setTimeout(connectWS, 1000 + Math.random() * 2000);
+					};
+					_ws.onerror = function() { _ws.close(); };
+				}
+				connectWS();
+
 				var root = ReactDOM.createRoot(mount);
 				root.render(React.createElement(Excalidraw, {
 					viewModeEnabled: true,
 					theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
 					excalidrawAPI: function(api) {
+						_api = api;
 						window.dispatchEvent(new Event('resize'));
 						fetch('/api/shared/' + slug + '/data')
 							.then(function(r) { return r.json(); })
 							.then(function(data) {
 								if (data && data.elements) {
-									api.updateScene({ elements: data.elements, appState: data.appState });
+									_api.updateScene({ elements: data.elements, appState: data.appState });
 								}
 							})
 							.catch(function(e) { console.error('Load error:', e); });

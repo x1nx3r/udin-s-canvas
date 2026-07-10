@@ -129,6 +129,32 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 					var mount = document.getElementById('canvas-mount');
 					var _dirty = false;
 					var _scene = null;
+					// _wsElements tracks the last element state received from the network.
+					// Used in Phase 5 as the loop guard for the infinite broadcast prevention.
+					var _wsElements = null;
+
+					// WebSocket — broadcaster (owner sends all local changes to the hub).
+					var _ws = null;
+					function connectWS() {
+						var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+						_ws = new WebSocket(proto + '//' + location.host + '/api/draw/' + id + '/ws');
+						_ws.onmessage = function(event) {
+							// Owner receives back patches from guests (Phase 5).
+							// Store as _wsElements for the loop guard in onChange.
+							try {
+								var payload = JSON.parse(event.data);
+								if (payload.type === 'update' && payload.elements) {
+									_wsElements = payload.elements;
+									window.excalidrawAPI.updateScene({ elements: payload.elements });
+								}
+							} catch(e) {}
+						};
+						_ws.onclose = function() {
+							setTimeout(connectWS, 1000 + Math.random() * 2000);
+						};
+						_ws.onerror = function() { _ws.close(); };
+					}
+					connectWS();
 
 					var React = window.ExcalidrawBundle.React;
 					var ReactDOM = window.ExcalidrawBundle.ReactDOM;
@@ -151,6 +177,11 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 						onChange: function(elements, appState) {
 							_scene = { elements: elements, appState: appState };
 							_dirty = true;
+							// Broadcast local changes to the hub so guests see them in real-time.
+							// _wsElements guard (Phase 5) will go here to prevent echo loops.
+							if (_ws && _ws.readyState === WebSocket.OPEN) {
+								_ws.send(JSON.stringify({ type: 'update', elements: elements }));
+							}
 						},
 						theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
 						viewModeEnabled: false,
