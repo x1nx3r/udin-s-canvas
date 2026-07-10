@@ -113,16 +113,6 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 				}
 				var _username = sessionStorage.getItem('collab_username') || null;
 
-				// Physical DOM interaction tracking to filter out Excalidraw internal mutations
-				var _lastActivity = 0;
-				function markActive(e) {
-					if (e.type === 'pointermove' && e.buttons === 0) return;
-					_lastActivity = Date.now();
-				}
-				mount.addEventListener('pointerdown', markActive, true);
-				mount.addEventListener('pointermove', markActive, true);
-				mount.addEventListener('keydown', markActive, true);
-
 				// Game Loop Architecture
 				var _lastBroadcastHash = '';
 				var _lastNetworkHash = '';
@@ -147,13 +137,6 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 						return; // No local changes
 					}
 
-					if (Date.now() - _lastActivity > 500) {
-						// State changed, but user hasn't touched the canvas in 500ms.
-						// This is Excalidraw normalizing a remote packet. Swallow the echo.
-						_lastNetworkHash = currentHash;
-						return;
-					}
-
 					// Genuine physical local change — broadcast it
 					_lastBroadcastHash = currentHash;
 					_ws.send(JSON.stringify({ type: 'update', elements: elements }));
@@ -170,7 +153,31 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 							if (payload.type === 'update' && _api && payload.elements) {
 								_lastNetworkHash = getHash(payload.elements);
 								_networkLockTime = Date.now();
-								_api.updateScene({ elements: payload.elements });
+								
+								// Protect active local elements from being overwritten by remote normalization
+								var appState = _api.getAppState();
+								var activeIds = {};
+								if (appState.draggingElement) activeIds[appState.draggingElement.id] = true;
+								if (appState.editingElement) activeIds[appState.editingElement.id] = true;
+								if (appState.resizingElement) activeIds[appState.resizingElement.id] = true;
+								if (appState.multiElement) activeIds[appState.multiElement.id] = true;
+								if (appState.selectedElementIds) {
+									for (var k in appState.selectedElementIds) {
+										if (appState.selectedElementIds[k]) activeIds[k] = true;
+									}
+								}
+
+								var safeElements = payload.elements;
+								if (Object.keys(activeIds).length > 0) {
+									safeElements = [];
+									for (var i = 0; i < payload.elements.length; i++) {
+										if (!activeIds[payload.elements[i].id]) {
+											safeElements.push(payload.elements[i]);
+										}
+									}
+								}
+
+								_api.updateScene({ elements: safeElements });
 							} else if (payload.type === 'pointer' && payload.clientId && payload.clientId !== _clientId) {
 								_collaborators.set(payload.clientId, {
 									pointer: payload.pointer,
