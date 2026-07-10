@@ -129,10 +129,8 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 					var mount = document.getElementById('canvas-mount');
 					var _dirty = false;
 					var _scene = null;
-					// Loop guard: set to true immediately before calling updateScene() with
-					// a remote payload. The resulting onChange fires synchronously in the
-					// same JS event-loop turn, sees the flag, and skips re-broadcasting.
-					var _suppressNextChange = false;
+					// CRDT-style loop guard: tracks the highest known version of each element.
+					var _knownVersions = new Map();
 					// Collaborator cursor map keyed by clientId.
 					var _collaborators = new Map();
 
@@ -163,8 +161,13 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 							try {
 								var payload = JSON.parse(event.data);
 								if (payload.type === 'update' && payload.elements) {
-									// Suppress the onChange that updateScene() will fire.
-									_suppressNextChange = true;
+									// Track incoming versions so onChange knows these aren't local changes.
+									payload.elements.forEach(function(el) {
+										var known = _knownVersions.get(el.id) || 0;
+										if (el.version > known) {
+											_knownVersions.set(el.id, el.version);
+										}
+									});
 									window.excalidrawAPI.updateScene({ elements: payload.elements });
 								} else if (payload.type === 'pointer' && payload.clientId) {
 									_collaborators.set(payload.clientId, {
@@ -202,14 +205,24 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 						},
 						onChange: function(elements, appState) {
 							_scene = { elements: elements, appState: appState };
-							// Loop guard: if this onChange was triggered by a remote updateScene(),
-							// suppress re-broadcasting. Still mark dirty so owner autosave persists
-							// guest changes.
-							if (_suppressNextChange) {
-								_suppressNextChange = false;
-								_dirty = true;
-								return;
+							
+							// Elegant loop guard: deep compare element versions.
+							// Only broadcast if at least one element has a strictly higher
+							// version than what we've previously seen (from network or local).
+							var hasLocalChanges = false;
+							for (var i = 0; i < elements.length; i++) {
+								var el = elements[i];
+								var known = _knownVersions.get(el.id) || 0;
+								if (el.version > known) {
+									hasLocalChanges = true;
+									_knownVersions.set(el.id, el.version);
+								}
 							}
+
+							if (!hasLocalChanges) {
+								return; // Network echo or no-op — drop silently
+							}
+
 							_dirty = true;
 							// Throttle to one send per animation frame to avoid flooding
 							// the socket with every intermediate pointer position.

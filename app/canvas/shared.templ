@@ -103,8 +103,8 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 				var allowPublicEdits = mount.dataset.allowPublicEdits === 'true';
 
 				var _api = null;
-				// Loop guard for updateScene -> onChange echo prevention.
-				var _suppressNextChange = false;
+				// CRDT-style loop guard: tracks the highest known version of each element.
+				var _knownVersions = new Map();
 				var _collaborators = new Map();
 
 				// Identity: persisted across page reloads within the same browser session.
@@ -142,7 +142,13 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 						try {
 							var payload = JSON.parse(event.data);
 							if (payload.type === 'update' && _api && payload.elements) {
-								_suppressNextChange = true;
+								// Track incoming versions so onChange knows these aren't local changes.
+								payload.elements.forEach(function(el) {
+									var known = _knownVersions.get(el.id) || 0;
+									if (el.version > known) {
+										_knownVersions.set(el.id, el.version);
+									}
+								});
 								_api.updateScene({ elements: payload.elements });
 							} else if (payload.type === 'pointer' && payload.clientId && payload.clientId !== _clientId) {
 								_collaborators.set(payload.clientId, {
@@ -209,11 +215,21 @@ templ SharedPage(title string, slug string, allowPublicEdits bool) {
 
 				if (allowPublicEdits) {
 					excalidrawProps.onChange = function(elements, appState) {
-						// Loop guard: skip re-broadcasting if this onChange is a reaction
-						// to a remote updateScene() call.
-						if (_suppressNextChange) {
-							_suppressNextChange = false;
-							return; // Network echo — drop silently, don't broadcast
+						// Elegant loop guard: deep compare element versions.
+						// Only broadcast if at least one element has a strictly higher
+						// version than what we've previously seen (from network or local).
+						var hasLocalChanges = false;
+						for (var i = 0; i < elements.length; i++) {
+							var el = elements[i];
+							var known = _knownVersions.get(el.id) || 0;
+							if (el.version > known) {
+								hasLocalChanges = true;
+								_knownVersions.set(el.id, el.version);
+							}
+						}
+
+						if (!hasLocalChanges) {
+							return; // Network echo or no-op — drop silently
 						}
 
 						// Genuine local change — throttle and broadcast to the hub.
