@@ -383,7 +383,7 @@ The Go binary backed by an embedded SQLite (`WAL` mode, `MaxOpenConns(1)`) mathe
 
 The actual bottleneck is the Linux OOM killer—the OS-level memory footprint (Go runtime threads + SQLite page cache) peaked at 94.1 MB, just shy of the 128 MB hard limit.
 
-See [`LOAD_TEST.md`](./LOAD_TEST.md) for the extensive telemetry breakdown.
+See `load_tests/LOAD_TEST.md` (ignored in version control) for the extensive telemetry breakdown.
 
 ---
 
