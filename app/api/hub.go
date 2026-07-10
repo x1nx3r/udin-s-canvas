@@ -9,19 +9,23 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Room holds all active WebSocket connections for a single drawing session.
-// The key is the connection pointer; the value is unused (map as a set).
+type Client struct {
+	Conn *websocket.Conn
+	Send chan []byte
+}
+
+// Room holds all active WebSocket clients for a single drawing session.
 type Room struct {
 	mu        sync.Mutex
-	clients   map[*websocket.Conn]bool
+	clients   map[*Client]bool
 	key       string
 	createdAt time.Time
-	msgCount  int64 // total messages broadcast through this room
+	msgCount  int64
 }
 
 func newRoom(key string) *Room {
 	r := &Room{
-		clients:   make(map[*websocket.Conn]bool),
+		clients:   make(map[*Client]bool),
 		key:       key,
 		createdAt: time.Now(),
 	}
@@ -29,26 +33,28 @@ func newRoom(key string) *Room {
 	return r
 }
 
-func (r *Room) add(conn *websocket.Conn) {
+func (r *Room) add(client *Client) {
 	r.mu.Lock()
-	r.clients[conn] = true
+	r.clients[client] = true
 	n := len(r.clients)
 	r.mu.Unlock()
-	log.Printf("[hub] conn  JOIN  key=%s peers=%d remote=%s", r.key, n, conn.RemoteAddr())
+	log.Printf("[hub] conn  JOIN  key=%s peers=%d remote=%s", r.key, n, client.Conn.RemoteAddr())
 }
 
-func (r *Room) remove(conn *websocket.Conn) {
+func (r *Room) remove(client *Client) {
 	r.mu.Lock()
-	delete(r.clients, conn)
+	if _, ok := r.clients[client]; ok {
+		delete(r.clients, client)
+		close(client.Send)
+	}
 	n := len(r.clients)
 	r.mu.Unlock()
-	log.Printf("[hub] conn  LEFT  key=%s peers=%d remote=%s", r.key, n, conn.RemoteAddr())
+	log.Printf("[hub] conn  LEFT  key=%s peers=%d remote=%s", r.key, n, client.Conn.RemoteAddr())
 }
 
-// broadcast writes msg to every client in the room except the sender.
-// Each write happens under the lock; slow clients will delay others.
-// Latency of each individual write is logged so we can catch the culprit.
-func (r *Room) broadcast(sender *websocket.Conn, msgType int, msg []byte) {
+// broadcast queues msg to every client in the room except the sender.
+// Slow clients whose channels are full will be disconnected to prevent blocking.
+func (r *Room) broadcast(sender *Client, msg []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -57,25 +63,19 @@ func (r *Room) broadcast(sender *websocket.Conn, msgType int, msg []byte) {
 	skipped := 0
 	start := time.Now()
 
-	for conn := range r.clients {
-		if conn == sender {
+	for client := range r.clients {
+		if client == sender {
 			skipped++
 			continue
 		}
-		ws := time.Now()
-		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		err := conn.WriteMessage(msgType, msg)
-		elapsed := time.Since(ws)
-		if err != nil {
-			log.Printf("[hub] bcast FAIL  key=%s remote=%s bytes=%d elapsed=%s err=%v",
-				r.key, conn.RemoteAddr(), len(msg), elapsed, err)
-		} else {
+		select {
+		case client.Send <- msg:
 			count++
-			if elapsed > 50*time.Millisecond {
-				// Slow write — this is the latency culprit.
-				log.Printf("[hub] bcast SLOW  key=%s remote=%s bytes=%d elapsed=%s",
-					r.key, conn.RemoteAddr(), len(msg), elapsed)
-			}
+		default:
+			// Client's send buffer is full; disconnect slow client.
+			log.Printf("[hub] bcast DROP  key=%s remote=%s buffer full", r.key, client.Conn.RemoteAddr())
+			close(client.Send)
+			delete(r.clients, client)
 		}
 	}
 
@@ -88,16 +88,6 @@ func (r *Room) snapshot() (int, int64, time.Duration) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.clients), r.msgCount, time.Since(r.createdAt)
-}
-
-func (r *Room) pingClient(conn *websocket.Conn) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.clients[conn] {
-		return fmt.Errorf("client gone")
-	}
-	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	return conn.WriteMessage(websocket.PingMessage, nil)
 }
 
 func (r *Room) empty() bool {

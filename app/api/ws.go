@@ -77,7 +77,6 @@ func GuestWSHandler(w http.ResponseWriter, r *http.Request) {
 	serveWS(w, r, roomKey)
 }
 
-// serveWS upgrades the connection, registers it in the hub, and starts the read loop.
 func serveWS(w http.ResponseWriter, r *http.Request, roomKey string) {
 	upgradeStart := time.Now()
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -88,71 +87,90 @@ func serveWS(w http.ResponseWriter, r *http.Request, roomKey string) {
 	log.Printf("[ws]  upgrade OK    room=%s remote=%s elapsed=%s",
 		roomKey, conn.RemoteAddr(), time.Since(upgradeStart))
 
+	client := &Client{
+		Conn: conn,
+		Send: make(chan []byte, 256),
+	}
+
+	room := getOrCreateRoom(roomKey)
+	room.add(client)
+
+	// Start the write pump in a background goroutine.
+	go writePump(client, roomKey, room)
+
+	// Run the read pump in the current goroutine.
+	readPump(client, roomKey, room)
+}
+
+func readPump(client *Client, roomKey string, room *Room) {
 	// OOM guard: reject frames larger than 512KB.
-	conn.SetReadLimit(maxReadBytes)
+	client.Conn.SetReadLimit(maxReadBytes)
 
 	// Laptop-lid / silent TCP drop guard.
-	conn.SetReadDeadline(time.Now().Add(pongDeadline))
-	conn.SetPongHandler(func(appData string) error {
-		conn.SetReadDeadline(time.Now().Add(pongDeadline))
-		log.Printf("[ws]  pong   room=%s remote=%s", roomKey, conn.RemoteAddr())
+	client.Conn.SetReadDeadline(time.Now().Add(pongDeadline))
+	client.Conn.SetPongHandler(func(string) error {
+		client.Conn.SetReadDeadline(time.Now().Add(pongDeadline))
+		log.Printf("[ws]  pong   room=%s remote=%s", roomKey, client.Conn.RemoteAddr())
 		return nil
 	})
 
-	room := getOrCreateRoom(roomKey)
-	room.add(conn)
-
-	// done is closed when the read loop exits, signalling the ping goroutine
-	// to terminate immediately rather than waiting up to pingInterval.
-	done := make(chan struct{})
-
-	// Ping goroutine: keep the connection alive and detect silent drops.
-	go func() {
-		ticker := time.NewTicker(pingInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-done:
-				return
-			case <-ticker.C:
-				log.Printf("[ws]  ping   room=%s remote=%s", roomKey, conn.RemoteAddr())
-				if err := room.pingClient(conn); err != nil {
-					log.Printf("[ws]  ping  FAIL room=%s remote=%s err=%v", roomKey, conn.RemoteAddr(), err)
-					return
-				}
-			}
-		}
-	}()
-
-	// connectedAt used to log total session duration on disconnect.
 	connectedAt := time.Now()
 
-	// Read loop: broadcast every incoming message to all other room members.
 	defer func() {
-		close(done) // signal ping goroutine to exit immediately
-		conn.Close()
-		room.remove(conn)
+		room.remove(client)
+		client.Conn.Close()
 		deleteRoomIfEmpty(roomKey)
 		log.Printf("[ws]  DISCONN room=%s remote=%s session=%s",
-			roomKey, conn.RemoteAddr(), time.Since(connectedAt).Round(time.Millisecond))
+			roomKey, client.Conn.RemoteAddr(), time.Since(connectedAt).Round(time.Millisecond))
 	}()
 
 	for {
 		readStart := time.Now()
-		msgType, msg, err := conn.ReadMessage()
+		_, msg, err := client.Conn.ReadMessage()
 		if err != nil {
-			// Normal close or deadline exceeded — exit cleanly.
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("[ws]  read  ERR  room=%s remote=%s err=%v", roomKey, conn.RemoteAddr(), err)
+				log.Printf("[ws]  read  ERR  room=%s remote=%s err=%v", roomKey, client.Conn.RemoteAddr(), err)
 			} else {
-				log.Printf("[ws]  read  CLOSE room=%s remote=%s reason=%v", roomKey, conn.RemoteAddr(), err)
+				log.Printf("[ws]  read  CLOSE room=%s remote=%s reason=%v", roomKey, client.Conn.RemoteAddr(), err)
 			}
 			return
 		}
 		readElapsed := time.Since(readStart)
-		log.Printf("[ws]  read  MSG  room=%s remote=%s bytes=%d type=%d readWait=%s",
-			roomKey, conn.RemoteAddr(), len(msg), msgType, readElapsed)
+		log.Printf("[ws]  read  MSG  room=%s remote=%s bytes=%d readWait=%s",
+			roomKey, client.Conn.RemoteAddr(), len(msg), readElapsed)
 
-		room.broadcast(conn, msgType, msg)
+		room.broadcast(client, msg)
+	}
+}
+
+func writePump(client *Client, roomKey string, room *Room) {
+	ticker := time.NewTicker(pingInterval)
+	defer func() {
+		ticker.Stop()
+		client.Conn.Close()
+	}()
+
+	for {
+		select {
+		case msg, ok := <-client.Send:
+			client.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if !ok {
+				// The room closed the channel (e.g. straggler disconnect).
+				client.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+
+			if err := client.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+				log.Printf("[ws]  write FAIL room=%s remote=%s err=%v", roomKey, client.Conn.RemoteAddr(), err)
+				return
+			}
+		case <-ticker.C:
+			log.Printf("[ws]  ping   room=%s remote=%s", roomKey, client.Conn.RemoteAddr())
+			client.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := client.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Printf("[ws]  ping  FAIL room=%s remote=%s err=%v", roomKey, client.Conn.RemoteAddr(), err)
+				return
+			}
+		}
 	}
 }
