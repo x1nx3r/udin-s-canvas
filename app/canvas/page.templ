@@ -133,6 +133,7 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 				var _collaborators = new Map();
 				var _lastSceneVersion = -1;
 				var _sceneElements = [];
+				var _uploadedFiles = new Set();
 
 				var _ws = null;
 				var _collabMode = false;
@@ -249,6 +250,21 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 									_lastSceneVersion = getSceneVersion(data.elements);
 									api.updateScene({ elements: data.elements, appState: data.appState });
 								}
+								if (data && data.files) {
+									var now = Date.now();
+									var fileEntries = {};
+									Object.keys(data.files).forEach(function(fid) {
+										_uploadedFiles.add(fid);
+										fileEntries[fid] = {
+											id: fid,
+											mimeType: data.files[fid].indexOf('image/svg') > -1 ? 'image/svg+xml' : 'image/webp',
+											dataURL: data.files[fid],
+											created: now,
+											lastRetrieved: now
+										};
+									});
+									api.addFiles(fileEntries);
+								}
 								connectSSE();
 							})
 							.catch(function(e) {
@@ -256,7 +272,7 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 								connectSSE();
 							});
 					},
-					onChange: function(elements, appState) {
+					onChange: function(elements, appState, files) {
 						_sceneElements = elements;
 						_scene = { elements: elements, appState: appState };
 						_dirty = true;
@@ -269,6 +285,25 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 									payload: { elements: elements }
 								}));
 							}
+						}
+						if (files) {
+							Object.keys(files).forEach(function(fid) {
+								if (_uploadedFiles.has(fid)) return;
+								var f = files[fid];
+								fetch('/api/draw/' + id + '/file', {
+									method: 'POST',
+									headers: {'Content-Type': 'application/json'},
+									body: JSON.stringify({
+										fileId: fid,
+										mimeType: f.mimeType,
+										data: f.dataURL
+									})
+								}).then(function(r) {
+									if (r.ok) _uploadedFiles.add(fid);
+								}).catch(function(e) {
+									console.error('File upload error:', e);
+								});
+							});
 						}
 					},
 					onPointerUpdate: function(payload) {

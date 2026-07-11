@@ -33,6 +33,8 @@ func PageHandler(w http.ResponseWriter, r *http.Request) {
 		systemHandler(w, r)
 	case "/admin/vip":
 		vipHandler(w, r)
+	case "/admin/users/storage-unlimited-toggle":
+		storageUnlimitedToggle(w, r)
 	default:
 		// Check /admin/users/{uid}
 		if len(path) > 13 && path[:13] == "/admin/users/" {
@@ -86,7 +88,8 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 	rows, err := lib.DB.QueryContext(r.Context(), `
 		SELECT u.uid, u.email, u.name, u.created_at, u.last_seen, COALESCE(u.last_ip, ''),
 		       (SELECT COUNT(*) FROM drawings d WHERE d.owner_id = u.uid) AS drawing_count,
-		       (SELECT COUNT(*) FROM feature_whitelist fw WHERE fw.email = u.email) > 0 AS is_vip
+		       (SELECT COUNT(*) FROM feature_whitelist fw WHERE fw.email = u.email) > 0 AS is_vip,
+		       COALESCE(u.storage_used_bytes, 0), COALESCE(u.storage_max_bytes, 31457280)
 		FROM users u
 		ORDER BY u.last_seen DESC
 	`)
@@ -100,7 +103,7 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 	var users []UserEntry
 	for rows.Next() {
 		var u UserEntry
-		if err := rows.Scan(&u.UID, &u.Email, &u.Name, &u.CreatedAt, &u.LastSeen, &u.LastIP, &u.DrawingCount, &u.IsVIP); err != nil {
+		if err := rows.Scan(&u.UID, &u.Email, &u.Name, &u.CreatedAt, &u.LastSeen, &u.LastIP, &u.DrawingCount, &u.IsVIP, &u.StorageUsed, &u.StorageMaxBytes); err != nil {
 			log.Printf("scan user: %v", err)
 			continue
 		}
@@ -115,9 +118,10 @@ func userDetailHandler(w http.ResponseWriter, r *http.Request, uid string) {
 	err := lib.DB.QueryRowContext(r.Context(), `
 		SELECT u.uid, u.email, u.name, u.created_at, u.last_seen, COALESCE(u.last_ip, ''),
 		       (SELECT COUNT(*) FROM drawings d WHERE d.owner_id = u.uid),
-		       (SELECT COUNT(*) FROM feature_whitelist fw WHERE fw.email = u.email) > 0
+		       (SELECT COUNT(*) FROM feature_whitelist fw WHERE fw.email = u.email) > 0,
+		       COALESCE(u.storage_used_bytes, 0), COALESCE(u.storage_max_bytes, 31457280)
 		FROM users u WHERE u.uid = ?
-	`, uid).Scan(&u.UID, &u.Email, &u.Name, &u.CreatedAt, &u.LastSeen, &u.LastIP, &u.DrawingCount, &u.IsVIP)
+	`, uid).Scan(&u.UID, &u.Email, &u.Name, &u.CreatedAt, &u.LastSeen, &u.LastIP, &u.DrawingCount, &u.IsVIP, &u.StorageUsed, &u.StorageMaxBytes)
 	if err != nil {
 		log.Printf("user detail %s: %v", uid, err)
 		http.NotFound(w, r)
@@ -283,6 +287,38 @@ func AddHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	VipItem(e).Render(r.Context(), w)
+}
+
+// storageUnlimitedToggle toggles a user's storage between unlimited and default.
+func storageUnlimitedToggle(w http.ResponseWriter, r *http.Request) {
+	uid := r.FormValue("uid")
+	if uid == "" {
+		http.Error(w, "missing uid", http.StatusBadRequest)
+		return
+	}
+
+	var current int64
+	err := lib.DB.QueryRowContext(r.Context(),
+		`SELECT storage_max_bytes FROM users WHERE uid = ?`, uid,
+	).Scan(&current)
+	if err != nil {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+
+	newVal := int64(31457280) // default
+	if current != -1 {
+		newVal = -1 // toggle to unlimited
+	}
+
+	if _, err := lib.DB.ExecContext(r.Context(),
+		`UPDATE users SET storage_max_bytes = ? WHERE uid = ?`, newVal, uid,
+	); err != nil {
+		http.Error(w, "update failed", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/admin/users/"+uid, http.StatusSeeOther)
 }
 
 // RemoveHandler removes an email from the VIP whitelist.

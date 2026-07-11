@@ -73,6 +73,8 @@ func main() {
 	mux.Handle("PUT /api/draw/{id}/rename", lib.RequireAuth(lib.RateLimitAPI(api.RenameHandler)))
 	mux.Handle("POST /api/draw/{id}/thumbnail", lib.RequireAuth(lib.RateLimitAPI(api.ThumbnailHandler)))
 	mux.Handle("PUT /api/draw/{id}/public-edit", lib.RequireAuth(lib.RateLimitAPI(api.PublicEditHandler)))
+	mux.Handle("POST /api/draw/{id}/file", lib.RequireAuth(lib.RateLimitAPI(api.SaveFileHandler)))
+	mux.Handle("DELETE /api/draw/{id}/file", lib.RequireAuth(lib.RateLimitAPI(api.DeleteFileHandler)))
 	mux.Handle("DELETE /api/draw/{id}", lib.RequireAuth(lib.RateLimitAPI(api.DeleteHandler)))
 
 	mux.HandleFunc("GET /shared/{slug}", canvas.SharedPageHandler)
@@ -112,6 +114,7 @@ func main() {
 	adminMux.HandleFunc("GET /admin/vip", admin.PageHandler)
 	adminMux.HandleFunc("POST /admin/vip/add", admin.AddHandler)
 	adminMux.HandleFunc("DELETE /admin/vip/remove", admin.RemoveHandler)
+	adminMux.HandleFunc("POST /admin/users/storage-unlimited-toggle", admin.PageHandler)
 	mux.Handle("/admin/", lib.RequireSuperAdmin(adminMux))
 
 	// Middleware

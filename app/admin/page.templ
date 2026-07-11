@@ -25,14 +25,16 @@ type DashboardStats struct {
 }
 
 type UserEntry struct {
-	UID          string
-	Email        string
-	Name         string
-	CreatedAt    time.Time
-	LastSeen     time.Time
-	LastIP       string
-	DrawingCount int
-	IsVIP        bool
+	UID             string
+	Email           string
+	Name            string
+	CreatedAt       time.Time
+	LastSeen        time.Time
+	LastIP          string
+	DrawingCount    int
+	IsVIP           bool
+	StorageUsed     int64
+	StorageMaxBytes int64
 }
 
 type DrawingEntry struct {
@@ -201,6 +203,7 @@ templ UsersPage(users []UserEntry) {
 						<th class="py-3 pr-4">UID</th>
 						<th class="py-3 pr-4">Drawings</th>
 						<th class="py-3 pr-4">VIP</th>
+						<th class="py-3 pr-4">Storage</th>
 						<th class="py-3 pr-4">Last IP</th>
 						<th class="py-3 pr-4">Created</th>
 						<th class="py-3 pr-4">Last Seen</th>
@@ -220,6 +223,13 @@ templ UsersPage(users []UserEntry) {
 									<span class="text-xs font-bold text-[var(--peach)]">VIP</span>
 								}
 							</td>
+							<td class="py-3 pr-4 font-mono text-[var(--fg-muted)] text-xs">
+								if u.StorageMaxBytes < 0 {
+									<span class="text-xs font-bold text-[var(--teal)]">Unlimited</span>
+								} else {
+									{ formatBytes(uint64(u.StorageUsed)) } / { formatBytes(uint64(u.StorageMaxBytes)) }
+								}
+							</td>
 							<td class="py-3 pr-4 font-mono text-[var(--fg-muted)] text-xs">{ u.LastIP }</td>
 							<td class="py-3 pr-4 text-[var(--fg-muted)] text-xs">{ u.CreatedAt.Format("2006-01-02 15:04") }</td>
 							<td class="py-3 pr-4 text-[var(--fg-muted)] text-xs">{ u.LastSeen.Format("2006-01-02 15:04") }</td>
@@ -231,15 +241,34 @@ templ UsersPage(users []UserEntry) {
 	}
 }
 
-templ UserDetailPage(u UserEntry, drawings []DrawingEntry) {
+	templ UserDetailPage(u UserEntry, drawings []DrawingEntry) {
 	@AdminLayout("User: "+u.Email, "") {
 		<a href="/admin/users" class="text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)] no-underline hover:text-[var(--fg)]">&larr; Back to Users</a>
 		<h1 class="text-lg font-bold font-heading uppercase tracking-wider mt-4 mb-6">{ u.Email }</h1>
+		<div class="mb-6">
+			<form action="/admin/users/storage-unlimited-toggle" method="POST" style="display:inline">
+				<input type="hidden" name="uid" value={ u.UID }/>
+				<button type="submit" class={ "border-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wider cursor-pointer",
+					templ.KV("border-[var(--teal)] text-[var(--teal)] hover:bg-[var(--teal)] hover:text-[var(--bg)]", u.StorageMaxBytes != -1),
+					templ.KV("border-[var(--pink)] text-[var(--pink)] hover:bg-[var(--pink)] hover:text-[var(--bg)]", u.StorageMaxBytes == -1),
+				}>
+					if u.StorageMaxBytes == -1 {
+						Revoke Unlimited Storage
+					} else {
+						Grant Unlimited Storage
+					}
+				</button>
+			</form>
+		</div>
 		<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
 			@StatCard("UID", u.UID)
 			@StatCard("Name", u.Name)
 			@StatCard("Drawings", strconv.Itoa(u.DrawingCount))
 			@StatCard("VIP", func() string { if u.IsVIP { return "Yes" }; return "No" }())
+			@StatCard("Storage", func() string {
+				if u.StorageMaxBytes < 0 { return "Unlimited" }
+				return formatBytes(uint64(u.StorageUsed)) + " / " + formatBytes(uint64(u.StorageMaxBytes))
+			}())
 			@StatCard("Last IP", u.LastIP)
 			@StatCard("Last Seen", u.LastSeen.Format("2006-01-02 15:04"))
 		</div>

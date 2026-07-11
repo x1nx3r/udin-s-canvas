@@ -10,11 +10,11 @@ import (
 func SharedDataHandler(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 
-	var content string
+	var content, drawingID string
 	var allowPublicEdits int
 	err := lib.DB.QueryRowContext(r.Context(),
-		"SELECT content, allow_public_edits FROM drawings WHERE share_slug = ?", slug,
-	).Scan(&content, &allowPublicEdits)
+		"SELECT id, content, allow_public_edits FROM drawings WHERE share_slug = ?", slug,
+	).Scan(&drawingID, &content, &allowPublicEdits)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -22,19 +22,24 @@ func SharedDataHandler(w http.ResponseWriter, r *http.Request) {
 
 	scene := sanitizeSceneJSON(content)
 
-	// Embed allow_public_edits into the response so the client knows
-	// whether to mount in viewMode or full-edit mode.
 	var parsed map[string]json.RawMessage
 	if err := json.Unmarshal(scene, &parsed); err != nil {
 		http.NotFound(w, r)
 		return
 	}
+
+	// Embed allow_public_edits.
 	parsed["allowPublicEdits"] = json.RawMessage(func() string {
 		if allowPublicEdits == 1 {
 			return "true"
 		}
 		return "false"
 	}())
+
+	// Embed files.
+	files := buildFilesMap(drawingID)
+	fileJSON, _ := json.Marshal(files)
+	parsed["files"] = fileJSON
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(parsed)

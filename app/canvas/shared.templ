@@ -115,6 +115,7 @@ templ SharedPage(title string, slug string, allowPublicEdits bool, meta app.Page
 
 				var _lastSceneVersion = -1;
 				var _sceneElements = [];
+				var _uploadedFiles = new Set();
 
 				var _ws = null;
 				function handleRemoteScene(remoteElements) {
@@ -201,6 +202,20 @@ templ SharedPage(title string, slug string, allowPublicEdits bool, meta app.Page
 										elements: data.elements,
 										appState: Object.assign({}, data.appState, { viewModeEnabled: !allowPublicEdits })
 									});
+								}
+								if (data && data.files) {
+									var now = Date.now();
+									var fileEntries = {};
+									Object.keys(data.files).forEach(function(fid) {
+										fileEntries[fid] = {
+											id: fid,
+											mimeType: data.files[fid].indexOf('image/svg') > -1 ? 'image/svg+xml' : 'image/webp',
+											dataURL: data.files[fid],
+											created: now,
+											lastRetrieved: now
+										};
+									});
+									_api.addFiles(fileEntries);
 								}
 								connectWS();
 							})
