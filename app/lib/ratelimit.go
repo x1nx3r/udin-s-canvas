@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -77,9 +78,20 @@ func init() {
 	}()
 }
 
+func RealIP(r *http.Request) string {
+	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
+		return ip
+	}
+	// Strip port from RemoteAddr before using
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
+}
+
 func RateLimitAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		key := r.RemoteAddr
+		key := RealIP(r)
 		if !authLimiter.allow(key) {
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			return
@@ -90,7 +102,7 @@ func RateLimitAuth(next http.HandlerFunc) http.HandlerFunc {
 
 func RateLimitWS(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		key := r.RemoteAddr
+		key := RealIP(r)
 		if !wsLimiter.allow(key) {
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			return
@@ -101,7 +113,7 @@ func RateLimitWS(next http.HandlerFunc) http.HandlerFunc {
 
 func RateLimitAPI(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		key := r.RemoteAddr
+		key := RealIP(r)
 		if !apiLimiter.allow(key) {
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			return
