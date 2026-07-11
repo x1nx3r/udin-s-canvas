@@ -13,6 +13,8 @@ type rateLimiter struct {
 	rate     int
 	burst    int
 	interval time.Duration
+	hits     int64
+	blocked  map[string]int64
 }
 
 type bucket struct {
@@ -23,6 +25,7 @@ type bucket struct {
 func newRateLimiter(rate, burst int, interval time.Duration) *rateLimiter {
 	return &rateLimiter{
 		clients:  make(map[string]*bucket),
+		blocked:  make(map[string]int64),
 		rate:     rate,
 		burst:    burst,
 		interval: interval,
@@ -52,7 +55,41 @@ func (rl *rateLimiter) allow(key string) bool {
 		b.tokens--
 		return true
 	}
+	rl.hits++
+	rl.blocked[key]++
 	return false
+}
+
+type RateLimitReport struct {
+	Name    string
+	Hits    int64
+	Rate    int
+	Burst   int
+	Blocked map[string]int64
+}
+
+func (rl *rateLimiter) report(name string) RateLimitReport {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	blocked := make(map[string]int64, len(rl.blocked))
+	for k, v := range rl.blocked {
+		blocked[k] = v
+	}
+	return RateLimitReport{
+		Name:    name,
+		Hits:    rl.hits,
+		Rate:    rl.rate,
+		Burst:   rl.burst,
+		Blocked: blocked,
+	}
+}
+
+func RateLimitReports() []RateLimitReport {
+	return []RateLimitReport{
+		authLimiter.report("auth"),
+		wsLimiter.report("ws"),
+		apiLimiter.report("api"),
+	}
 }
 
 var (

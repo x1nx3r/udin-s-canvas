@@ -126,4 +126,12 @@ func migrate() {
 			log.Fatalf("migrate allow_public_edits: %v", err)
 		}
 	}
+
+	// Idempotent: add last_ip column to users for admin panel.
+	_ = DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('users') WHERE name='last_ip'`).Scan(&colCount)
+	if colCount == 0 {
+		if _, err = DB.Exec(`ALTER TABLE users ADD COLUMN last_ip TEXT`); err != nil {
+			log.Fatalf("migrate users.last_ip: %v", err)
+		}
+	}
 }

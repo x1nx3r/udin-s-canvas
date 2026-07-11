@@ -62,11 +62,12 @@ func Middleware(next http.Handler) http.Handler {
 		name, _ := token.Claims["name"].(string)
 
 		// Track the user in the admin panel's users table.
+		clientIP := RealIP(r)
 		_, err = DB.Exec(
-			`INSERT INTO users (uid, email, name, created_at, last_seen)
-			 VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-			 ON CONFLICT(uid) DO UPDATE SET email=excluded.email, name=CASE WHEN excluded.name IS NOT NULL AND excluded.name != '' THEN excluded.name ELSE users.name END, last_seen=CURRENT_TIMESTAMP`,
-			uid, email, name,
+			`INSERT INTO users (uid, email, name, created_at, last_seen, last_ip)
+			 VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
+			 ON CONFLICT(uid) DO UPDATE SET email=excluded.email, name=CASE WHEN excluded.name IS NOT NULL AND excluded.name != '' THEN excluded.name ELSE users.name END, last_seen=CURRENT_TIMESTAMP, last_ip=?`,
+			uid, email, name, clientIP, clientIP,
 		)
 		if err != nil {
 			log.Printf("track user %s: %v", uid, err)

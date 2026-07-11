@@ -2,7 +2,10 @@ package admin
 
 import (
 	"strconv"
+	"strings"
 	"time"
+
+	"gotth/app/lib"
 )
 
 type WhitelistEntry struct {
@@ -18,6 +21,7 @@ type DashboardStats struct {
 	WSConnections  int
 	DBSize         string
 	Uptime         string
+	RateLimitHits  int64
 }
 
 type UserEntry struct {
@@ -26,6 +30,7 @@ type UserEntry struct {
 	Name         string
 	CreatedAt    time.Time
 	LastSeen     time.Time
+	LastIP       string
 	DrawingCount int
 	IsVIP        bool
 }
@@ -133,7 +138,7 @@ templ StatCard(label string, value string) {
 	</div>
 }
 
-templ DashboardPage(stats DashboardStats) {
+templ DashboardPage(stats DashboardStats, rlReports []lib.RateLimitReport) {
 	@AdminLayout("Dashboard", "/admin") {
 		<h1 class="text-lg font-bold font-heading uppercase tracking-wider mb-6">Dashboard</h1>
 		<div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -144,6 +149,42 @@ templ DashboardPage(stats DashboardStats) {
 			@StatCard("WS Connections", strconv.Itoa(stats.WSConnections))
 			@StatCard("Database Size", stats.DBSize)
 			@StatCard("Uptime", stats.Uptime)
+			@StatCard("Rate Limited", strconv.FormatInt(stats.RateLimitHits, 10))
+		</div>
+		<h2 class="text-sm font-bold uppercase tracking-wider mt-8 mb-4">Rate Limit Breakers</h2>
+		<div class="overflow-x-auto">
+			<table class="w-full text-left border-collapse">
+				<thead>
+					<tr class="border-b-2 border-[var(--border)] text-xs font-bold uppercase tracking-wider text-[var(--fg-muted)]">
+						<th class="py-3 pr-4">Limiter</th>
+						<th class="py-3 pr-4">Total Denied</th>
+						<th class="py-3 pr-4">Rate</th>
+						<th class="py-3 pr-4">Top IPs</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, r := range rlReports {
+						<tr class="border-b border-[var(--border)] text-sm font-mono">
+							<td class="py-3 pr-4">{ r.Name }</td>
+							<td class="py-3 pr-4">{ strconv.FormatInt(r.Hits, 10) }</td>
+							<td class="py-3 pr-4 text-[var(--fg-muted)]">{ strconv.Itoa(r.Rate) }/s burst { strconv.Itoa(r.Burst) }</td>
+							<td class="py-3 pr-4">
+								{ func() string {
+									ips := make([]string, 0, 3)
+									n := 0
+									for ip, count := range r.Blocked {
+										if n >= 3 { break }
+										ips = append(ips, ip + " (" + strconv.FormatInt(count, 10) + ")")
+										n++
+									}
+									if len(ips) == 0 { return "—" }
+									return strings.Join(ips, ", ")
+								}() }
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
 		</div>
 	}
 }
@@ -160,6 +201,7 @@ templ UsersPage(users []UserEntry) {
 						<th class="py-3 pr-4">UID</th>
 						<th class="py-3 pr-4">Drawings</th>
 						<th class="py-3 pr-4">VIP</th>
+						<th class="py-3 pr-4">Last IP</th>
 						<th class="py-3 pr-4">Created</th>
 						<th class="py-3 pr-4">Last Seen</th>
 					</tr>
@@ -178,6 +220,7 @@ templ UsersPage(users []UserEntry) {
 									<span class="text-xs font-bold text-[var(--peach)]">VIP</span>
 								}
 							</td>
+							<td class="py-3 pr-4 font-mono text-[var(--fg-muted)] text-xs">{ u.LastIP }</td>
 							<td class="py-3 pr-4 text-[var(--fg-muted)] text-xs">{ u.CreatedAt.Format("2006-01-02 15:04") }</td>
 							<td class="py-3 pr-4 text-[var(--fg-muted)] text-xs">{ u.LastSeen.Format("2006-01-02 15:04") }</td>
 						</tr>
@@ -197,6 +240,8 @@ templ UserDetailPage(u UserEntry, drawings []DrawingEntry) {
 			@StatCard("Name", u.Name)
 			@StatCard("Drawings", strconv.Itoa(u.DrawingCount))
 			@StatCard("VIP", func() string { if u.IsVIP { return "Yes" }; return "No" }())
+			@StatCard("Last IP", u.LastIP)
+			@StatCard("Last Seen", u.LastSeen.Format("2006-01-02 15:04"))
 		</div>
 		<h2 class="text-sm font-bold uppercase tracking-wider mb-4">Drawings</h2>
 		if len(drawings) == 0 {

@@ -62,6 +62,12 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 		dbSize = formatBytes(uint64(fi.Size()))
 	}
 
+	rlReports := lib.RateLimitReports()
+	totalBlocked := int64(0)
+	for _, r := range rlReports {
+		totalBlocked += r.Hits
+	}
+
 	stats := DashboardStats{
 		TotalDrawings:  totalDrawings,
 		TotalUsers:     totalUsers,
@@ -70,14 +76,15 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 		WSConnections:  wsConns,
 		DBSize:         dbSize,
 		Uptime:         formatUptime(),
+		RateLimitHits:  totalBlocked,
 	}
 
-	DashboardPage(stats).Render(r.Context(), w)
+	DashboardPage(stats, rlReports).Render(r.Context(), w)
 }
 
 func usersHandler(w http.ResponseWriter, r *http.Request) {
 	rows, err := lib.DB.QueryContext(r.Context(), `
-		SELECT u.uid, u.email, u.name, u.created_at, u.last_seen,
+		SELECT u.uid, u.email, u.name, u.created_at, u.last_seen, COALESCE(u.last_ip, ''),
 		       (SELECT COUNT(*) FROM drawings d WHERE d.owner_id = u.uid) AS drawing_count,
 		       (SELECT COUNT(*) FROM feature_whitelist fw WHERE fw.email = u.email) > 0 AS is_vip
 		FROM users u
@@ -93,7 +100,7 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 	var users []UserEntry
 	for rows.Next() {
 		var u UserEntry
-		if err := rows.Scan(&u.UID, &u.Email, &u.Name, &u.CreatedAt, &u.LastSeen, &u.DrawingCount, &u.IsVIP); err != nil {
+		if err := rows.Scan(&u.UID, &u.Email, &u.Name, &u.CreatedAt, &u.LastSeen, &u.LastIP, &u.DrawingCount, &u.IsVIP); err != nil {
 			log.Printf("scan user: %v", err)
 			continue
 		}
@@ -106,11 +113,11 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 func userDetailHandler(w http.ResponseWriter, r *http.Request, uid string) {
 	var u UserEntry
 	err := lib.DB.QueryRowContext(r.Context(), `
-		SELECT u.uid, u.email, u.name, u.created_at, u.last_seen,
+		SELECT u.uid, u.email, u.name, u.created_at, u.last_seen, COALESCE(u.last_ip, ''),
 		       (SELECT COUNT(*) FROM drawings d WHERE d.owner_id = u.uid),
 		       (SELECT COUNT(*) FROM feature_whitelist fw WHERE fw.email = u.email) > 0
 		FROM users u WHERE u.uid = ?
-	`, uid).Scan(&u.UID, &u.Email, &u.Name, &u.CreatedAt, &u.LastSeen, &u.DrawingCount, &u.IsVIP)
+	`, uid).Scan(&u.UID, &u.Email, &u.Name, &u.CreatedAt, &u.LastSeen, &u.LastIP, &u.DrawingCount, &u.IsVIP)
 	if err != nil {
 		log.Printf("user detail %s: %v", uid, err)
 		http.NotFound(w, r)
