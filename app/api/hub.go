@@ -63,10 +63,57 @@ func (r *Room) loadFromDB() {
 	}
 }
 
+var collabNotifier = &CollabNotifier{
+	watchers: make(map[string][]chan int),
+}
+
+type CollabNotifier struct {
+	mu       sync.RWMutex
+	watchers map[string][]chan int
+}
+
+func (n *CollabNotifier) subscribe(drawingID string) chan int {
+	ch := make(chan int, 4)
+	n.mu.Lock()
+	n.watchers[drawingID] = append(n.watchers[drawingID], ch)
+	n.mu.Unlock()
+	return ch
+}
+
+func (n *CollabNotifier) unsubscribe(drawingID string, ch chan int) {
+	n.mu.Lock()
+	watchers := n.watchers[drawingID]
+	for i, w := range watchers {
+		if w == ch {
+			n.watchers[drawingID] = append(watchers[:i], watchers[i+1:]...)
+			break
+		}
+	}
+	if len(n.watchers[drawingID]) == 0 {
+		delete(n.watchers, drawingID)
+	}
+	n.mu.Unlock()
+}
+
+func (n *CollabNotifier) notify(drawingID string, count int) {
+	n.mu.RLock()
+	for _, ch := range n.watchers[drawingID] {
+		select {
+		case ch <- count:
+		default:
+		}
+	}
+	n.mu.RUnlock()
+}
+
 func (r *Room) add(client *Client) {
 	r.mu.Lock()
 	r.clients[client] = true
+	count := len(r.clients)
 	r.mu.Unlock()
+	if r.drawingID != "" {
+		collabNotifier.notify(r.drawingID, count)
+	}
 }
 
 var collabEndedMsg = []byte(`{"type":"COLLAB_ENDED"}`)
@@ -93,7 +140,11 @@ func (r *Room) remove(client *Client) {
 			}
 		}
 	}
+	count := len(r.clients)
 	r.mu.Unlock()
+	if r.drawingID != "" {
+		collabNotifier.notify(r.drawingID, count)
+	}
 }
 
 func (r *Room) sendSceneInit(client *Client) {

@@ -136,7 +136,7 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 
 				var _ws = null;
 				var _collabMode = false;
-				var _collabPollInterval = null;
+				var _eventSource = null;
 				var _wsSendQueue = [];
 
 				function handleRemoteScene(remoteElements) {
@@ -153,23 +153,22 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 					api.updateScene({ elements: reconciled, captureUpdate: Bundle.CaptureUpdateAction.NEVER });
 				}
 
-				function checkCollabStatus() {
-					if (_collabMode) return;
-					fetch('/api/draw/' + id + '/collab-status')
-						.then(function(r) { return r.json(); })
-						.then(function(data) {
-							if (data.online > 0) upgradeToCollab();
-						})
-						.catch(function() {});
+				function connectSSE() {
+					if (_eventSource) return;
+					_eventSource = new EventSource('/api/draw/' + id + '/collab-events');
+					_eventSource.addEventListener('count', function(e) {
+						if (!_collabMode && parseInt(e.data) > 0) upgradeToCollab();
+					});
+					_eventSource.onerror = function() {
+						_eventSource.close();
+						_eventSource = null;
+						setTimeout(connectSSE, 2000);
+					};
 				}
 
 				function upgradeToCollab() {
 					if (_collabMode) return;
 					_collabMode = true;
-					if (_collabPollInterval) {
-						clearInterval(_collabPollInterval);
-						_collabPollInterval = null;
-					}
 					connectWS();
 				}
 
@@ -181,7 +180,6 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 						_ws.close();
 						_ws = null;
 					}
-					_collabPollInterval = setInterval(checkCollabStatus, 1000);
 					if (_dirty && _scene) flushIfDirty();
 				}
 
@@ -224,20 +222,11 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 						} catch(e) { console.error('[ws] onmessage error:', e); }
 					};
 					_ws.onclose = function() {
-						setTimeout(function() {
-							if (_collabMode) {
-								fetch('/api/draw/' + id + '/collab-status')
-									.then(function(r) { return r.json(); })
-									.then(function(data) {
-										if (_collabMode && data.online > 0) {
-											connectWS();
-										} else {
-											downgradeToSolo();
-										}
-									})
-									.catch(function() { downgradeToSolo(); });
-							}
-						}, 500);
+						if (_collabMode) {
+							// Reconnect SSE — if collaborators still there, SSE will fire
+							// count>0 and trigger upgradeToCollab again.
+							connectSSE();
+						}
 					};
 					_ws.onerror = function() { _ws.close(); };
 				}
@@ -260,11 +249,11 @@ templ CanvasPage(title string, drawingId string, isVIP bool) {
 									_lastSceneVersion = getSceneVersion(data.elements);
 									api.updateScene({ elements: data.elements, appState: data.appState });
 								}
-								_collabPollInterval = setInterval(checkCollabStatus, 1000);
+								connectSSE();
 							})
 							.catch(function(e) {
 								console.error('Load error:', e);
-								_collabPollInterval = setInterval(checkCollabStatus, 1000);
+								connectSSE();
 							});
 					},
 					onChange: function(elements, appState) {

@@ -78,6 +78,7 @@ func main() {
 	// WebSocket routes
 	mux.Handle("GET /api/draw/{id}/ws", lib.RequireAuth(api.OwnerWSHandler))
 	mux.Handle("GET /api/draw/{id}/collab-status", lib.RequireAuth(api.CollabStatusHandler))
+	mux.Handle("GET /api/draw/{id}/collab-events", lib.RequireAuth(api.CollabEventsHandler))
 	mux.HandleFunc("GET /api/shared/{slug}/ws", api.GuestWSHandler)
 	mux.HandleFunc("GET /api/ws/stats", api.WsStatsHandler) // plain-text hub diagnostic
 

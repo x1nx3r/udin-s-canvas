@@ -197,7 +197,10 @@ templ SharedPage(title string, slug string, allowPublicEdits bool, meta app.Page
 							.then(function(data) {
 								if (data && data.elements) {
 									_lastSceneVersion = getSceneVersion(data.elements);
-									_api.updateScene({ elements: data.elements, appState: data.appState });
+									_api.updateScene({
+										elements: data.elements,
+										appState: Object.assign({}, data.appState, { viewModeEnabled: !allowPublicEdits })
+									});
 								}
 								connectWS();
 							})

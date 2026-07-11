@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -31,6 +32,54 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+}
+
+// CollabEventsHandler streams SSE events for collab count changes.
+// The owner connects this instead of polling collab-status.
+// Route: GET /api/draw/{id}/collab-events  (auth required)
+func CollabEventsHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !checkOwnership(r, id) {
+		http.NotFound(w, r)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	ch := collabNotifier.subscribe(id)
+	defer collabNotifier.unsubscribe(id, ch)
+
+	// Send current count immediately
+	hub.mu.RLock()
+	room, ok := hub.rooms["draw:"+id]
+	hub.mu.RUnlock()
+	count := 0
+	if ok {
+		room.mu.Lock()
+		count = len(room.clients)
+		room.mu.Unlock()
+	}
+
+	fmt.Fprintf(w, "event: count\ndata: %d\n\n", count)
+	flusher.Flush()
+
+	for {
+		select {
+		case count := <-ch:
+			fmt.Fprintf(w, "event: count\ndata: %d\n\n", count)
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 // CollabStatusHandler returns the number of online collaborators for a drawing.
